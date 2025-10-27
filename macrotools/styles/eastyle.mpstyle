@@ -1,0 +1,31 @@
+font.family: sans-serif
+font.sans-serif: Montserrat
+
+lines.linewidth : 2.25
+figure.figsize: 9.0, 5.0
+
+figure.facecolor: "#F9F7F5"
+
+figure.titlesize: 22
+axes.labelsize : 12
+
+axes.xmargin: 0
+axes.ymargin: 0
+axes.grid: True
+axes.grid.axis: both
+axes.spines.top: False
+axes.spines.right: False
+
+ytick.major.size: 0
+grid.linewidth: 0.25
+ytick.left: False
+ytick.right: False
+
+axes.prop_cycle: cycler('color', ['40B2FF', 'FF591F','008A6A','2E2A73','EAC14B','B20066','8A2B9C'])
+
+patch.linewidth: 2.0
+patch.edgecolor: black
+patch.force_edgecolor: True
+axes.facecolor: "#F9F7F5"
+
+axes.autolimit_mode: round_numbers

@@ -1,0 +1,28 @@
+[build-system]
+requires = ['setuptools>=64', 'wheel']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'macrotools'
+version = '0.1.0'
+description = 'Employ America tools for working with and displaying macroeconomic data.'
+authors = [
+    {name = 'Preston Mui', email = 'preston@employamerica.org'}
+]
+requires-python = '>=3.12'
+dependencies = [
+    'matplotlib>=3.10.0',
+    'numpy>=2.0.0',
+    'statsmodels>=0.14.4',
+    'pandas>=2.2.3',
+    'requests>=2.32.3'
+]
+
+[tool.setuptools.packages.find]
+where = ['.']
+
+[tool.setuptools.package-data]
+macrotools = [
+    'styles/*.mplstyle',
+    'styles/fonts/*.ttf'
+]
