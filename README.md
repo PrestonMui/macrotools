@@ -8,13 +8,15 @@ A Python package providing flexible tools to work with macroeconomic data and cr
 - Support for dual y-axes for comparing different data series
 - Flexible formatting options
 - Easy integration with existing matplotlib workflows
-- Download a wide array of macroeconomic data
+- Download BLS Series
 
 ## Installation
 
-pip install git+https://github.com/YOUR_USERNAME/macrotools.git
+pip install git+https://github.com/PrestonMui/macrotools.git
 
-### For Development (Recommended for team members working on the code)
+## Examples
+
+See [this notebook](https://github.com/PrestonMui/macrotools/blob/main/macrotools/examples/macrotools_guide.ipynb) for examples on how to use Macrotools
 
 # Install from local directory
 pip install /path/to/macrotools
