@@ -23,7 +23,7 @@ from pathlib import Path
 ########################################
 
 # Apply stylesheet
-stylefile = Path(__file__).parent / 'styles' / 'eastyle.mpstyle'
+stylefile = Path(__file__).parent / 'styles' / 'eastyle.mplstyle'
 plt.style.use(str(stylefile))
 
 # Extract and store colors from stylesheet
@@ -159,7 +159,7 @@ def tsgraph(xdata: Union[List, np.ndarray, Dict],
     ########################################
     # Call stylesheet and font
     ########################################
-    stylefile = Path(__file__).parent / 'styles' / 'eastyle.mpstyle'
+    stylefile = Path(__file__).parent / 'styles' / 'eastyle.mplstyle'
     fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
     fontprop = font_manager.FontProperties(fname=str(fontfile))
     style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
