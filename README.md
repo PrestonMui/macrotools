@@ -12,6 +12,8 @@ A Python package providing flexible tools to work with macroeconomic data and cr
 
 ## Installation
 
+pip install git+https://github.com/YOUR_USERNAME/macrotools.git
+
 ### For Development (Recommended for team members working on the code)
 
 # Install from local directory
