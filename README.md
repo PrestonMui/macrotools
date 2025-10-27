@@ -12,7 +12,7 @@ A Python package providing flexible tools to work with macroeconomic data and cr
 
 ## Installation
 
-pip install git+https://github.com/PrestonMui/macrotools.git
+`pip install git+https://github.com/PrestonMui/macrotools.git`
 
 ## Examples
 
