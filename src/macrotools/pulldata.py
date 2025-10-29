@@ -2,8 +2,8 @@ from typing import Union, List, Dict, Optional
 import pandas as pd
 import numpy as np
 import json, io, requests, webbrowser
-from .utils import timer
 from pathlib import Path
+from .utils import timer
 
 @timer
 def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M'):
@@ -219,6 +219,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
 
         # Keep only PCE Series
         pceseries = pd.read_csv(str(Path(__file__).parent / 'data' / 'pceseries.csv'))
+
         pceseries_melted = pd.melt(pceseries, id_vars
         =['line', 'name'], value_vars = ['quantitycode','pricecode','nominalcode','realcode'], var_name='datatype')
         pceseries_melted['datatype'] = pceseries_melted['datatype'].str.removesuffix('code')
@@ -239,7 +240,8 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
             data.asfreq('MS')
 
         data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
-
+        data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
+        data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
         return data
 
 def pull_bls_series(series_list: Union[str, List],
