@@ -27,5 +27,6 @@ where = ['src']
 [tool.setuptools.package-data]
 macrotools = [
     'styles/*.mplstyle',
-    'styles/fonts/*.ttf'
+    'styles/fonts/*.ttf',
+    'data/*.csv'
 ]
