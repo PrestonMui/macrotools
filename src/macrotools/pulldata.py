@@ -36,7 +36,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         Provide a filepath to save the file as a .pkl file.
     """
 
-    valid_sources = ['ce','ln','ci','jt','cu','pc','wp','stclaims', 'nipa-pce']
+    valid_sources = ['ce','ln','ci','jt','cu','pc','wp','ei','stclaims', 'nipa-pce']
     
     # Check if source is valid, Pull with pulling data.
     if source not in valid_sources:
