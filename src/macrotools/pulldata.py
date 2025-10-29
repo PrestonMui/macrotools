@@ -3,12 +3,13 @@ import pandas as pd
 import numpy as np
 import json, io, requests, webbrowser
 from .utils import timer
+from pathlib import Path
 
 @timer
-def pull_flat_file(source, email = None, pivot = True, save_file = None):
+def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M'):
 
     """
-    Pull flat macro data files from BLS and BEA.
+    Pull full data files from BLS and BEA.
     
     Parameters:
     -----------
@@ -29,13 +30,13 @@ def pull_flat_file(source, email = None, pivot = True, save_file = None):
         'nipa': National Income and Product Accounts
 
     email : str
-        Provide an email address to pull flat files from the BLS.
+        Provide an email address to pull files from the BLS.
 
     save_file : str
         Provide a filepath to save the file as a .pkl file.
     """
 
-    valid_sources = ['ce','ln','ci','jt','cu','pc','wp','stclaims']
+    valid_sources = ['ce','ln','ci','jt','cu','pc','wp','stclaims', 'nipa-pce']
     
     # Check if source is valid, Pull with pulling data.
     if source not in valid_sources:
@@ -52,6 +53,7 @@ def pull_flat_file(source, email = None, pivot = True, save_file = None):
             'wp': PPI Commodity
             'ei': Import and Export Price Indices
             'stclaims': State UI Claims
+            'nipa-pce': Monthly NIPA PCE Data
             """
         )
     print(f"Pulling data from source: {source}")
@@ -80,21 +82,21 @@ def pull_flat_file(source, email = None, pivot = True, save_file = None):
         # Pull flat file data
         headers = {'User-Agent': email}
         r = requests.get(flat_file_url, headers=headers)
-        flatdata = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
+        data = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
         
         # Rename columns
-        flatdata.columns = flatdata.columns.str.strip()
+        data.columns = data.columns.str.strip()
 
         # Clean up data
-        flatdata['series_id'] = flatdata['series_id'].str.strip()
-        flatdata['value'] = pd.to_numeric(flatdata['value'], errors='coerce')
+        data['series_id'] = data['series_id'].str.strip()
+        data['value'] = pd.to_numeric(data['value'], errors='coerce')
 
         # Dates
-        flatdata['frequency'] = flatdata['period'].apply(
+        data['frequency'] = data['period'].apply(
             lambda x: 'A' if (x=='M13') or x[0]=='A' else ('Q' if x[0]=='Q' else 'M')
         )
-        flatdata['month'] = flatdata['period'].apply(lambda x: pd.NA if (x=='M13') or (x=='A01') or (x[0]=='Q') else int(x[1:]))
-        flatdata['quarter'] = flatdata['period'].apply(lambda x: pd.NA if (x[0]=='M') or (x=='A01') else int(x[2:]))
+        data['month'] = data['period'].apply(lambda x: pd.NA if (x=='M13') or (x=='A01') or (x[0]=='Q') else int(x[1:]))
+        data['quarter'] = data['period'].apply(lambda x: pd.NA if (x[0]=='M') or (x=='A01') else int(x[2:]))
 
         # Pivot Data
         if pivot:
@@ -102,24 +104,24 @@ def pull_flat_file(source, email = None, pivot = True, save_file = None):
 
             if source in ['ce', 'ln', 'jt', 'cu', 'pc', 'wp', 'ei']:
 
-                flatdata = flatdata[flatdata['frequency']=='M'][['series_id','value','year','month']].copy()
-                flatdata['date'] = pd.to_datetime(flatdata['year'].astype(str) + '-' + flatdata['month'].astype(str), format='%Y-%m')
-                flatdata = flatdata.drop(['month','year'], axis=1)
+                data = data[data['frequency']=='M'][['series_id','value','year','month']].copy()
+                data['date'] = pd.to_datetime(data['year'].astype(str) + '-' + data['month'].astype(str), format='%Y-%m')
+                data = data.drop(['month','year'], axis=1)
 
-                flatdata = flatdata.pivot_table(values = 'value', index = 'date', columns = 'series_id')
-                flatdata = flatdata.asfreq('MS')
+                data = data.pivot_table(values = 'value', index = 'date', columns = 'series_id')
+                data = data.asfreq('MS')
 
             if source in ['ci']:
 
-                flatdata = flatdata[['series_id','value','year','quarter']].copy()
-                flatdata['period'] = pd.PeriodIndex(flatdata['year'].astype(str) + 'Q' + flatdata['quarter'].astype(str), freq='Q')
-                flatdata = flatdata.drop(['year','quarter'], axis=1)
+                data = data[['series_id','value','year','quarter']].copy()
+                data['period'] = pd.PeriodIndex(data['year'].astype(str) + 'Q' + data['quarter'].astype(str), freq='Q')
+                data = data.drop(['year','quarter'], axis=1)
 
-                flatdata = flatdata.pivot_table(values = 'value', index = 'period', columns = 'series_id')
-                flatdata = flatdata.asfreq('Q')
+                data = data.pivot_table(values = 'value', index = 'period', columns = 'series_id')
+                data = data.asfreq('Q')
 
         # Attributes
-        flatdata.attrs['data description'] = ''
+        data.attrs['data description'] = ''
 
         # Series
         if source in ['ln','ce', 'ci', 'cu','pc','wp']:
@@ -129,10 +131,10 @@ def pull_flat_file(source, email = None, pivot = True, save_file = None):
             series['series_id'] = series['series_id'].str.strip()
             series['series_title'] = series['series_title'].str.strip()
             series_dict = series.set_index('series_id')['series_title'].to_dict()
-            flatdata.attrs['series'] = series_dict
+            data.attrs['series'] = series_dict
 
-        if save_file: flatdata.to_pickle(save_file)
-        return flatdata
+        if save_file: data.to_pickle(save_file)
+        return data
 
     if source=='stclaims':
 
@@ -204,8 +206,43 @@ def pull_flat_file(source, email = None, pivot = True, save_file = None):
 
         if save_file: stclaims.to_pickle(save_file)
         return stclaims
+    
+    if source=='nipa-pce':
 
-def pull_bls_data(series_list: Union[str, List],
+        if freq!='M':
+            raise ValueError('Currently only frequency \'M\' is supported.')
+
+        url_nipa = 'https://apps.bea.gov/national/Release/TXT/NipaData' + freq + '.txt'
+        r = requests.get(url_nipa)
+        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+        data.rename(columns={'%SeriesCode': 'series_code', 'Period': 'period', 'Value': 'value'}, inplace=True)
+
+        # Keep only PCE Series
+        pceseries = pd.read_csv(str(Path(__file__).parent / 'data' / 'pceseries.csv'))
+        pceseries_melted = pd.melt(pceseries, id_vars
+        =['line', 'name'], value_vars = ['quantitycode','pricecode','nominalcode','realcode'], var_name='datatype')
+        pceseries_melted['datatype'] = pceseries_melted['datatype'].str.removesuffix('code')
+        pceseries_melted.rename(columns={'value': 'series_code'}, inplace=True)
+        data = pd.merge(data, pceseries_melted, how='right', right_on='series_code', left_on='series_code')
+
+        # Format date column
+        if freq=='M':
+            data['date'] = pd.to_datetime(data['period'], format='%YM%m')
+        data.drop(['period'], axis=1, inplace=True)
+
+        # Format numeric
+        data['value'] = pd.to_numeric(data['value'].str.replace(',',''))
+
+        # Format as pivot table
+        data = data.pivot_table(values='value', index = 'date', columns = ['line', 'datatype'])
+        if freq=='M':
+            data.asfreq('MS')
+
+        data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
+
+        return data
+
+def pull_bls_series(series_list: Union[str, List],
     start_year: Optional[int] = None,
     end_year: Optional[int] = None,
     save_file: Optional[str] = None):
@@ -251,15 +288,15 @@ def pull_bls_data(series_list: Union[str, List],
         df = pd.DataFrame(item['data'])
         df['series_id'] = series_id
         dfs.append(df)
-    df = pd.concat(dfs, ignore_index=True)
+    data = pd.concat(dfs, ignore_index=True)
 
-    df['value'] = pd.to_numeric(df['value'])
+    data['value'] = pd.to_numeric(data['value'])
 
-    df['month'] = df['period'].apply(lambda x: pd.NA if (x=='M13') or (x=='A01') or (x[0]=='Q') else int(x[1:]))
-    df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month'].astype(str), format='%Y-%m')
-    df = df[['date', 'value', 'series_id']].pivot_table(values = 'value', index = 'date', columns = 'series_id')
-    df = df.asfreq('MS')
+    data['month'] = data['period'].apply(lambda x: pd.NA if (x=='M13') or (x=='A01') or (x[0]=='Q') else int(x[1:]))
+    data['date'] = pd.to_datetime(data['year'].astype(str) + '-' + data['month'].astype(str), format='%Y-%m')
+    data = data[['date', 'value', 'series_id']].pivot_table(values = 'value', index = 'date', columns = 'series_id')
+    data = data.asfreq('MS')
 
-    if save_file: df.to_pickle(save_file)
+    if save_file: data.to_pickle(save_file)
 
-    return df
+    return data

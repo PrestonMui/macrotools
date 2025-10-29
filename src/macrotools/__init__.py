@@ -22,8 +22,8 @@ from .timeseries import (
 )
 
 from .pulldata import (
-	pull_flat_file,
-	pull_bls_data
+	pull_data_full,
+	pull_bls_series
 )
 
 # Define what gets imported with "from macrotools import *"
@@ -33,14 +33,3 @@ __all__ = ['tsgraph', 'eacolors', 'pull_flat_file']
 __version__ = '0.1.0'
 __author__ = 'Preston Mui'
 __email__ = 'preston@employamerica.org'
-
-# from fredapi import Fred
-# fred = Fred(api_key = 'dd5d48abc60f01fe7c4dbfe3ad1ae287')
-
-# # Stylesheet
-# plt.style.use("./eastyle.mpstyle")
-
-
-
-# Logo
-# logo = np.array(Image.open(r"ealogo_transparent.png"))

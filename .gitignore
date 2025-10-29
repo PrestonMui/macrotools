@@ -1,3 +1,5 @@
 src/macrotools/__pycache__/
 src/macrotools/desktop.ini
+src/macrotools.egg-info/build/
 src/macrotools.egg-info/
+build/
