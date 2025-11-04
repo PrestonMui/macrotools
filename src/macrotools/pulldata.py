@@ -36,7 +36,29 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         Provide a filepath to save the file as a .pkl file.
     """
 
-    valid_sources = ['ce','ln','ci','jt','cu','pc','wp','ei','stclaims', 'nipa-pce']
+    valid_sources = [
+        'ce',
+        'ln',
+        'ci',
+        'jt',
+        'cu',
+        'pc',
+        'wp',
+        'ei',
+        'stclaims',
+        'nipa-pce',
+        'ny-mfg',
+        'ny-svc',
+        'philly-mfg', 
+        'philly-nonmfg', 
+        'richmond-mfg', 
+        'richmond-nonmfg', 
+        'dallas-mfg', 
+        'dallas-svc', 
+        'dallas-retail', 
+        'kc-mfg', 
+        'kc-svc'
+    ]
     
     # Check if source is valid, Pull with pulling data.
     if source not in valid_sources:
@@ -54,6 +76,17 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
             'ei': Import and Export Price Indices
             'stclaims': State UI Claims
             'nipa-pce': Monthly NIPA PCE Data
+            'ny-mfg': NYFed Empire Survey
+            'ny-svc': NYFed Services Survey
+            'philly-mfg': Philly Fed Mfg Survey
+            'philly-nonmfg': Philly Fed Nonmfg Survey
+            'richmond-mfg': Richmond Fed Mfg Survey
+            'richmond-nonmfg': Richmond Fed Nonmfg Survey
+            'dallas-mfg': Dallas Fed Mfg Survey
+            'dallas-svc': Dallas Fed Services Survey
+            'dallas-retail': Dallas Fed Retail Survey
+            'kc-mfg': Kansas City Fed Mfg Survey
+            'kc-svc': Dallas Fed Services Survey
             """
         )
     print(f"Pulling data from source: {source}")
@@ -242,6 +275,113 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
         data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
         data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
+        return data
+    
+    if source=='ny-mfg':
+
+        url = 'https://www.newyorkfed.org/medialibrary/media/Survey/Empire/data/ESMS_SeasonallyAdjusted_Diffusion.csv'        
+        r = requests.get(url)
+        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+        data.rename(columns={'surveyDate': 'date'}, inplace=True)
+        data.set_index('date', inplace=True)
+
+        return data
+    
+    if source=='ny-svc':
+
+        url = 'https://www.newyorkfed.org/medialibrary/media/Survey/business_leaders/data/BLS_NotSeasonallyAdjusted_Diffusion.csv'
+        r = requests.get(url)
+        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+        data.rename(columns={'surveyDate': 'date'}, inplace=True)
+        data.set_index('date', inplace=True)
+        
+        return data
+    
+    if source=='philly-mfg':
+
+        url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/MBOS/Historical-Data/Diffusion-Indexes/bos_dif.csv'
+        r = requests.get(url)
+        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+
+        data['date'] = pd.to_datetime(data['DATE'], format='%b-%y')
+        data.loc[data['date'].dt.year==2068, 'date'] = data.loc[data['date'].dt.year==2068, 'date'].apply(lambda x: x.replace(year=1968))
+        data.drop(columns='DATE', axis=1, inplace=True)
+        data.set_index('date', inplace=True)
+
+        return data
+    
+    if source=='philly-nonmfg':
+
+        url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/NBOS/nboshistory.xlsx'
+        data = pd.read_excel(url)
+        data.set_index('date', inplace=True)
+        return data
+    
+    if source=='richmond-mfg':
+
+        url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/manufacturing/data/mfg_historicaldata.xlsx'
+        data = pd.read_excel(url)
+        data.set_index('date', inplace=True)
+        return data
+    
+    if source=='richmond-nonmfg':
+
+        url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/services/data/nmf_historicaldata.xlsx'
+        data = pd.read_excel(url)
+        data.set_index('date', inplace=True)
+        return data
+    
+    if source=='dallas-mfg':
+        url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tmos/documents/index_sa.xls'
+        data = pd.read_excel(url)
+        data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
+        data.drop(columns='Date', axis=1, inplace=True)
+        data.set_index('date', inplace=True)
+        return data
+    
+    if source=='dallas-svc':
+        url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tssos_index_sa.xls'
+        data = pd.read_excel(url)
+        data['date'] = pd.to_datetime(data['date'], format='%b-%y')
+        data.set_index('date', inplace=True)
+        return data
+    
+    if source=='dallas-retail':
+        url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tros_index_sa.xls'
+        data = pd.read_excel(url)
+        data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
+        data.drop(columns='Date', axis=1, inplace=True)
+        data.set_index('date', inplace=True)
+        return data
+    
+    if source=='kc-mfg':
+
+        webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/manufacturing-survey/')
+        url = input('Enter the url for the services survey data at the tab opened.')
+        data = pd.read_excel(url, skiprows=2)
+        data.loc[2:16, 'Unnamed: 0'] = data.iloc[2:16]['Unnamed: 0'].astype(str) + ' vs month ago sa'
+        data.loc[18:32, 'Unnamed: 0'] = data.iloc[18:32]['Unnamed: 0'].astype(str) + ' vs month ago nsa'
+        data.loc[34:48, 'Unnamed: 0'] = data.iloc[34:48]['Unnamed: 0'].astype(str) + ' vs year ago nsa'
+        data.loc[50:64, 'Unnamed: 0'] = data.iloc[50:64]['Unnamed: 0'].astype(str) + ' exp six months sa'
+        data.loc[66:80, 'Unnamed: 0'] = data.iloc[66:80]['Unnamed: 0'].astype(str) + ' exp six months nsa'
+        data = data.drop([0,1, 16, 17, 32, 33, 48, 49, 64, 65])
+
+        data = data.set_index('Unnamed: 0').transpose()
+        return data
+    
+    if source=='kc-svc':
+
+        webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/services-survey/')
+        url = input('Enter the url for the services survey data at the tab opened.')
+        data = pd.read_excel(url, skiprows=2)
+        data.loc[2:13, 'Unnamed: 0'] = data.iloc[2:13]['Unnamed: 0'].astype(str) + ' vs month ago sa'
+        data.loc[16:27, 'Unnamed: 0'] = data.iloc[16:27]['Unnamed: 0'].astype(str) + ' vs month ago nsa'
+        data.loc[30:43, 'Unnamed: 0'] = data.iloc[30:43]['Unnamed: 0'].astype(str) + ' vs year ago nsa'
+        data.loc[46:57, 'Unnamed: 0'] = data.iloc[46:57]['Unnamed: 0'].astype(str) + ' exp six months sa'
+        data.loc[60:71, 'Unnamed: 0'] = data.iloc[60:71]['Unnamed: 0'].astype(str) + ' exp six months nsa'
+        data = data.drop([0,1, 13, 14, 15, 27, 28, 29, 43, 44, 45, 57, 58, 59])
+
+        data = data.set_index('Unnamed: 0').transpose()
         return data
 
 def pull_bls_series(series_list: Union[str, List],
