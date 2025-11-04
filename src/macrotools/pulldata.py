@@ -3,14 +3,115 @@ import pandas as pd
 import numpy as np
 import json, io, requests, webbrowser
 from pathlib import Path
+import os
+import time
+from datetime import datetime
 from .utils import timer
 
+# Cache configuration
+def _get_cache_dir():
+    """Get cache directory from environment or default."""
+    cache_dir = os.getenv('MACRODATA_CACHE_DIR')
+    if cache_dir:
+        return Path(cache_dir)
+    return Path.home() / '.macrodata_cache'
+
+def _get_cache_file_path(source: str, pivot: bool, freq: str) -> Path:
+    """Generate cache file path for given parameters."""
+    cache_dir = _get_cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f'{source}_{pivot}_{freq}.pkl'
+
+def _get_cache_age_days(cache_file: Path) -> Optional[float]:
+    """Get age of cache file in days. Returns None if file doesn't exist."""
+    if not cache_file.exists():
+        return None
+    mtime = cache_file.stat().st_mtime
+    age_seconds = time.time() - mtime
+    return age_seconds / 86400
+
+def _should_refresh_cache(cache_file: Path, ttl_days: int = 7) -> bool:
+    """Check if cache should be refreshed (older than ttl_days)."""
+    age = _get_cache_age_days(cache_file)
+    if age is None:
+        return True  # No cache exists
+    return age >= ttl_days
+
+def _load_cached_data(source: str, pivot: bool, freq: str) -> Optional[pd.DataFrame]:
+    """Load data from cache if it exists and is valid."""
+    cache_file = _get_cache_file_path(source, pivot, freq)
+    if cache_file.exists():
+        try:
+            data = pd.read_pickle(cache_file)
+            age = _get_cache_age_days(cache_file)
+            print(f"Loaded {source} from cache ({age:.1f} days old)")
+            return data
+        except Exception as e:
+            print(f"Warning: Could not load cache for {source}: {e}")
+            return None
+    return None
+
+def _save_cached_data(data: pd.DataFrame, source: str, pivot: bool, freq: str) -> None:
+    """Save data to cache."""
+    cache_file = _get_cache_file_path(source, pivot, freq)
+    try:
+        data.to_pickle(cache_file)
+    except Exception as e:
+        print(f"Warning: Could not save cache for {source}: {e}")
+
+def get_cache_age(source: str, pivot: bool = True, freq: str = 'M') -> Optional[float]:
+    """
+    Get age of cached data in days.
+    Parameters:
+        source : str; Data source (e.g., 'ce', 'nipa-pce')
+        pivot : bool; Whether data is pivoted
+        freq : str; Frequency ('M', 'Q', etc.)
+    Returns:
+        float or None; Age in days if cached, None if not cached
+    """
+    cache_file = _get_cache_file_path(source, pivot, freq)
+    return _get_cache_age_days(cache_file)
+
+def clear_macrodata_cache(source: Optional[str] = None) -> None:
+    """
+    Clear cached data files.
+
+    Parameters:
+    -----------
+    source : str, optional
+        If provided, only clear cache for this source.
+        If None, clear all cached files.
+    """
+    cache_dir = _get_cache_dir()
+
+    if not cache_dir.exists():
+        print("Cache directory does not exist.")
+        return
+
+    if source:
+        # Clear specific source
+        for cache_file in cache_dir.glob(f'{source}_*.pkl'):
+            try:
+                cache_file.unlink()
+                print(f"Cleared cache: {cache_file.name}")
+            except Exception as e:
+                print(f"Error deleting {cache_file.name}: {e}")
+    else:
+        # Clear all caches
+        for cache_file in cache_dir.glob('*.pkl'):
+            try:
+                cache_file.unlink()
+                print(f"Cleared cache: {cache_file.name}")
+            except Exception as e:
+                print(f"Error deleting {cache_file.name}: {e}")
+        print("All cached data cleared.")
+
 @timer
-def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M'):
+def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M', force_refresh=False, cache=True):
 
     """
     Pull full data files from BLS and BEA.
-    
+
     Parameters:
     -----------
     source : str
@@ -23,7 +124,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         'pc': PPI Industry Data
         'wp': PPI Commodity Data
         'stclaims': State-level unemployment insurance claims
-        
+
         Not yet implemented:
         'ppi': Producer Price Index
         'ipi': Import Price Index.
@@ -34,6 +135,12 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
 
     save_file : str
         Provide a filepath to save the file as a .pkl file.
+
+    cache : bool, default=True
+        If True, use cached data if available (up to 7 days old).
+
+    force_refresh : bool, default=False
+        If True, ignore cache and pull fresh data.
     """
 
     valid_sources = [
@@ -89,6 +196,16 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
             'kc-svc': Dallas Fed Services Survey
             """
         )
+
+    # Check cache first
+    cache_file = _get_cache_file_path(source, pivot, freq)
+    if cache and not force_refresh and not _should_refresh_cache(cache_file):
+        cached_data = _load_cached_data(source, pivot, freq)
+        if cached_data is not None:
+            if save_file:
+                cached_data.to_pickle(save_file)
+            return cached_data
+
     print(f"Pulling data from source: {source}")
 
     # Format flatfile -- BLS Sources
@@ -167,6 +284,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
             data.attrs['series'] = series_dict
 
         if save_file: data.to_pickle(save_file)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
 
     if source=='stclaims':
@@ -238,6 +356,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
         if save_file: stclaims.to_pickle(save_file)
+        if cache: _save_cached_data(stclaims, source, pivot, freq)
         return stclaims
     
     if source=='nipa-pce':
@@ -275,16 +394,18 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
         data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
         data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='ny-mfg':
 
-        url = 'https://www.newyorkfed.org/medialibrary/media/Survey/Empire/data/ESMS_SeasonallyAdjusted_Diffusion.csv'        
+        url = 'https://www.newyorkfed.org/medialibrary/media/Survey/Empire/data/ESMS_SeasonallyAdjusted_Diffusion.csv'
         r = requests.get(url)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
         data.set_index('date', inplace=True)
 
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='ny-svc':
@@ -294,7 +415,8 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
         data.set_index('date', inplace=True)
-        
+
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='philly-mfg':
@@ -308,13 +430,15 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data.drop(columns='DATE', axis=1, inplace=True)
         data.set_index('date', inplace=True)
 
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
-    
+
     if source=='philly-nonmfg':
 
         url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/NBOS/nboshistory.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='richmond-mfg':
@@ -322,6 +446,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/manufacturing/data/mfg_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='richmond-nonmfg':
@@ -329,6 +454,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/services/data/nmf_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='dallas-mfg':
@@ -337,21 +463,24 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
         data.drop(columns='Date', axis=1, inplace=True)
         data.set_index('date', inplace=True)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
-    
+
     if source=='dallas-svc':
         url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tssos_index_sa.xls'
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['date'], format='%b-%y')
         data.set_index('date', inplace=True)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
-    
+
     if source=='dallas-retail':
         url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tros_index_sa.xls'
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
         data.drop(columns='Date', axis=1, inplace=True)
         data.set_index('date', inplace=True)
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
     
     if source=='kc-mfg':
@@ -367,8 +496,9 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data = data.drop([0,1, 16, 17, 32, 33, 48, 49, 64, 65])
 
         data = data.set_index('Unnamed: 0').transpose()
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
-    
+
     if source=='kc-svc':
 
         webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/services-survey/')
@@ -382,6 +512,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
         data = data.drop([0,1, 13, 14, 15, 27, 28, 29, 43, 44, 45, 57, 58, 59])
 
         data = data.set_index('Unnamed: 0').transpose()
+        if cache: _save_cached_data(data, source, pivot, freq)
         return data
 
 def pull_bls_series(series_list: Union[str, List],

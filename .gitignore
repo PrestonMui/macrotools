@@ -3,3 +3,5 @@ src/macrotools/desktop.ini
 src/macrotools.egg-info/build/
 src/macrotools.egg-info/
 build/
+.macrodata_cache/
+*.pkl

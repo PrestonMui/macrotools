@@ -23,7 +23,8 @@ from .timeseries import (
 
 from .pulldata import (
 	pull_data_full,
-	pull_bls_series
+	pull_bls_series,
+    clear_macrodata_cache
 )
 
 # Define what gets imported with "from macrotools import *"
