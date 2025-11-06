@@ -2,7 +2,7 @@
 
 ## Version 0
 
-## Version 0.1
+### Version 0.1
 
 - Removed state-level claims pulling for now
 - Changed pull_bls_series to use pull_data instead of the API. Note the new syntax.

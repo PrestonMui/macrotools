@@ -19,6 +19,11 @@ dependencies = [
     'requests>=2.32.3'
 ]
 
+[projects.url]
+Homepage = "https://github.com/prestonmui/macrotools"
+Documentation = "https://github.com/PrestonMui/macrotools/blob/main/macrotools/examples/macrotools_guide.ipynb"
+Changelog = "https://github.com/PrestonMui/macrotools/blob/main/CHANGELOG.md"
+
 [tool.setuptools.packages.find]
 where = ['src']
 
