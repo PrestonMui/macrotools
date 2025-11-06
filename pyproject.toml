@@ -6,6 +6,7 @@ build-backend = 'setuptools.build_meta'
 name = 'macrotools'
 version = '0.1.0'
 description = 'Employ America tools for pulling and graphing U.S. macroeconomic data.'
+readme = "README.md"
 authors = [
     {name = 'Preston Mui', email = 'preston@employamerica.org'}
 ]
@@ -33,5 +34,3 @@ macrotools = [
 
 [license]
 license = {text = "MIT"}
-
-readme = "README.md"
