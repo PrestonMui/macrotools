@@ -13,7 +13,7 @@ from .storage import (
 )
 
 @timer
-def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M', force_refresh=False, cache=True):
+def pull_data(source, email = None, pivot = True, save_file = None, freq='M', force_refresh=False, cache=True):
 
     """
     Pull full data files from BLS and BEA.

@@ -22,7 +22,7 @@ from .timeseries import (
 )
 
 from .pulldata import (
-	pull_data_full,
+	pull_data,
 	pull_bls_series,
 )
 
