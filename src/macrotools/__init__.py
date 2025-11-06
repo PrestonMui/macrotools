@@ -14,14 +14,17 @@ from matplotlib import font_manager
 fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
 font_manager.fontManager.addfont(str(fontfile))
 
-from .timeseries import (
+from .time_series_graph import (
 	tsgraph,
-	cagr,
-    rebase,
 	eacolors
 )
 
-from .pulldata import (
+from .time_series import (
+	cagr,
+    rebase,
+)
+
+from .pull_data import (
 	pull_data,
 	pull_bls_series,
 )
