@@ -24,11 +24,16 @@ from .timeseries import (
 from .pulldata import (
 	pull_data_full,
 	pull_bls_series,
-    clear_macrodata_cache
+)
+
+from .storage import (
+	clear_macrodata_cache,
+	store_email,
+	get_stored_email,
 )
 
 # Define what gets imported with "from macrotools import *"
-__all__ = ['tsgraph', 'eacolors', 'pull_flat_file']
+__all__ = ['tsgraph', 'eacolors', 'pull_data_full', 'pull_bls_series', 'clear_macrodata_cache', 'store_email', 'get_stored_email']
 
 # Package metadata
 __version__ = '0.1.0'

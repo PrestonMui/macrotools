@@ -3,108 +3,14 @@ import pandas as pd
 import numpy as np
 import json, io, requests, webbrowser
 from pathlib import Path
-import os
-import time
-from datetime import datetime
 from .utils import timer
-
-# Cache configuration
-def _get_cache_dir():
-    """Get cache directory from environment or default."""
-    cache_dir = os.getenv('MACRODATA_CACHE_DIR')
-    if cache_dir:
-        return Path(cache_dir)
-    return Path.home() / '.macrodata_cache'
-
-def _get_cache_file_path(source: str, pivot: bool, freq: str) -> Path:
-    """Generate cache file path for given parameters."""
-    cache_dir = _get_cache_dir()
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f'{source}_{pivot}_{freq}.pkl'
-
-def _get_cache_age_days(cache_file: Path) -> Optional[float]:
-    """Get age of cache file in days. Returns None if file doesn't exist."""
-    if not cache_file.exists():
-        return None
-    mtime = cache_file.stat().st_mtime
-    age_seconds = time.time() - mtime
-    return age_seconds / 86400
-
-def _should_refresh_cache(cache_file: Path, ttl_days: int = 7) -> bool:
-    """Check if cache should be refreshed (older than ttl_days)."""
-    age = _get_cache_age_days(cache_file)
-    if age is None:
-        return True  # No cache exists
-    return age >= ttl_days
-
-def _load_cached_data(source: str, pivot: bool, freq: str) -> Optional[pd.DataFrame]:
-    """Load data from cache if it exists and is valid."""
-    cache_file = _get_cache_file_path(source, pivot, freq)
-    if cache_file.exists():
-        try:
-            data = pd.read_pickle(cache_file)
-            age = _get_cache_age_days(cache_file)
-            print(f"Loaded {source} from cache ({age:.1f} days old)")
-            return data
-        except Exception as e:
-            print(f"Warning: Could not load cache for {source}: {e}")
-            return None
-    return None
-
-def _save_cached_data(data: pd.DataFrame, source: str, pivot: bool, freq: str) -> None:
-    """Save data to cache."""
-    cache_file = _get_cache_file_path(source, pivot, freq)
-    try:
-        data.to_pickle(cache_file)
-    except Exception as e:
-        print(f"Warning: Could not save cache for {source}: {e}")
-
-def get_cache_age(source: str, pivot: bool = True, freq: str = 'M') -> Optional[float]:
-    """
-    Get age of cached data in days.
-    Parameters:
-        source : str; Data source (e.g., 'ce', 'nipa-pce')
-        pivot : bool; Whether data is pivoted
-        freq : str; Frequency ('M', 'Q', etc.)
-    Returns:
-        float or None; Age in days if cached, None if not cached
-    """
-    cache_file = _get_cache_file_path(source, pivot, freq)
-    return _get_cache_age_days(cache_file)
-
-def clear_macrodata_cache(source: Optional[str] = None) -> None:
-    """
-    Clear cached data files.
-
-    Parameters:
-    -----------
-    source : str, optional
-        If provided, only clear cache for this source.
-        If None, clear all cached files.
-    """
-    cache_dir = _get_cache_dir()
-
-    if not cache_dir.exists():
-        print("Cache directory does not exist.")
-        return
-
-    if source:
-        # Clear specific source
-        for cache_file in cache_dir.glob(f'{source}_*.pkl'):
-            try:
-                cache_file.unlink()
-                print(f"Cleared cache: {cache_file.name}")
-            except Exception as e:
-                print(f"Error deleting {cache_file.name}: {e}")
-    else:
-        # Clear all caches
-        for cache_file in cache_dir.glob('*.pkl'):
-            try:
-                cache_file.unlink()
-                print(f"Cleared cache: {cache_file.name}")
-            except Exception as e:
-                print(f"Error deleting {cache_file.name}: {e}")
-        print("All cached data cleared.")
+from .storage import (
+    _get_cache_file_path,
+    _should_refresh_cache,
+    _load_cached_data,
+    _save_cached_data,
+    _get_email_for_bls,
+)
 
 @timer
 def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M', force_refresh=False, cache=True):
@@ -211,8 +117,7 @@ def pull_data_full(source, email = None, pivot = True, save_file = None, freq='M
     # Format flatfile -- BLS Sources
     if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei']:
 
-        if email is None:
-            raise ValueError("An email address input is required in order to pull BLS series.")
+        email = _get_email_for_bls(email)
 
         flat_file_name = {
             'ce': 'ce.data.0.AllCESSeries',
