@@ -16,7 +16,13 @@ A Python package providing flexible tools to work with macroeconomic data and cr
 
 ## Examples
 
-See [this notebook](https://github.com/PrestonMui/macrotools/blob/main/macrotools/examples/macrotools_guide.ipynb) for examples on how to use Macrotools
+See [this notebook](https://github.com/PrestonMui/macrotools/blob/main/examples/macrotools_guide.ipynb) for examples on how to use Macrotools
 
-# Install from local directory
-pip install /path/to/macrotools
+## Roadmap
+
+Some features I am working on.
+
+- Store email, API keys etc in a settings file; eliminate need to enter email with every BLS pull
+- BLS series pull -- allow for > 10 years data pulling at once
+- Wrapper for FRED API -- allow for pulling multiple series 
+- Upload to PyPi
