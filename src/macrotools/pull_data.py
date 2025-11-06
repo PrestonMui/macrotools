@@ -1,7 +1,7 @@
 from typing import Union, List, Dict, Optional
 import pandas as pd
 import numpy as np
-import json, io, requests, webbrowser
+import io, requests, webbrowser
 from pathlib import Path
 from .utils import timer
 from .storage import (
@@ -29,7 +29,6 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         'cu': CPI (all Urban Consumers)
         'pc': PPI Industry Data
         'wp': PPI Commodity Data
-        'stclaims': State-level unemployment insurance claims
 
         Not yet implemented:
         'ppi': Producer Price Index
@@ -58,7 +57,6 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         'pc',
         'wp',
         'ei',
-        'stclaims',
         'nipa-pce',
         'ny-mfg',
         'ny-svc',
@@ -87,7 +85,6 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
             'pc': PPI Industry
             'wp': PPI Commodity
             'ei': Import and Export Price Indices
-            'stclaims': State UI Claims
             'nipa-pce': Monthly NIPA PCE Data
             'ny-mfg': NYFed Empire Survey
             'ny-svc': NYFed Services Survey
@@ -192,77 +189,77 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         if cache: _save_cached_data(data, source, pivot, freq)
         return data
 
-    if source=='stclaims':
+    # if source=='stclaims':
 
-        # Pull flat file data
-        webbrowser.open_new_tab('https://oui.doleta.gov/unemploy/csv/ar539.csv')
-        stclaims_path = input('The DOL website does not permit bot access. I have opened the State-level unemployment data in a new browser. Please save the file and write the path, without quote marks, in this box, e.g.: C:/Users/prest/test/stclaims.csv ; if you input nothing I will look for the file in data/stclaims.csv ; Press Enter to Continue AFTER the file has finished downloading')
+    #     # Pull flat file data
+    #     webbrowser.open_new_tab('https://oui.doleta.gov/unemploy/csv/ar539.csv')
+    #     stclaims_path = input('The DOL website does not permit bot access. I have opened the State-level unemployment data in a new browser. Please save the file and write the path, without quote marks, in this box, e.g.: C:/Users/prest/test/stclaims.csv ; if you input nothing I will look for the file in data/stclaims.csv ; Press Enter to Continue AFTER the file has finished downloading')
 
-        if stclaims_path=='':
-            stclaims = pd.read_csv('data/stclaims.csv', parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'])
-        else:
-            stclaims = pd.read_csv(stclaims_path, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'])
+    #     if stclaims_path=='':
+    #         stclaims = pd.read_csv('data/stclaims.csv', parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'])
+    #     else:
+    #         stclaims = pd.read_csv(stclaims_path, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'])
 
-        stclaims.rename(columns={
-           'st': 'state',
-           'c1': 'weeknumber',
-           'c2': 'weekending',
-           'c3': 'ic',
-           'c4': 'fic',
-           'c5': 'xic',
-           'c6': 'wsic',
-           'c7': 'wseic',
-           'c8': 'cw',
-           'c9': 'fcw',
-           'c10': 'xcw',
-           'c11': 'wscw',
-           'c12': 'wsecw',
-           'c13': 'ebt',
-           'c14': 'ebui',
-           'c15': 'abt',
-           'c16': 'abui',
-           'c17': 'at',
-           'c18': 'ce',
-           'c19': 'r',
-           'c20': 'ar',
-           'c21': 'p',
-           'c22': 'status',
-           'c23': 'changedate'}, inplace=True)
+    #     stclaims.rename(columns={
+    #        'st': 'state',
+    #        'c1': 'weeknumber',
+    #        'c2': 'weekending',
+    #        'c3': 'ic',
+    #        'c4': 'fic',
+    #        'c5': 'xic',
+    #        'c6': 'wsic',
+    #        'c7': 'wseic',
+    #        'c8': 'cw',
+    #        'c9': 'fcw',
+    #        'c10': 'xcw',
+    #        'c11': 'wscw',
+    #        'c12': 'wsecw',
+    #        'c13': 'ebt',
+    #        'c14': 'ebui',
+    #        'c15': 'abt',
+    #        'c16': 'abui',
+    #        'c17': 'at',
+    #        'c18': 'ce',
+    #        'c19': 'r',
+    #        'c20': 'ar',
+    #        'c21': 'p',
+    #        'c22': 'status',
+    #        'c23': 'changedate'}, inplace=True)
 
-        column_descriptions = {
-            'ic': 'State UI Initial Claims, less intrastate transitional.',
-            'fic': 'UCFE-no UI Initial Claims.',
-            'xic': 'UCX only Initial Claims',
-            'wsic': 'STC or workshare total initial claims',
-            'wseic': 'STC or workshare equivalent initial claims',
-            'cw': 'State UI adjusted continued weeks claimed',
-            'fcw': 'UCFE-no UI adjusted continued weeks claimed',
-            'xcw': 'UCX only adjusted continued weeks claimed',
-            'wscw': 'STC or workshare total continued weeks claimed',
-            'wsecw': 'STC or workshare equivalent continued weeks claimed',
-            'ebt': 'Total continued weeks claimed under the Federal/State Extended Benefit Program--includes all intrastate and interstate continued weeks claimed filed from an agent state under the state UI, UCFE and UCX programs.',
-            'ebui': 'That part of EBT which represents only state UI weeks claimed under the Federal/State EB program.',
-            'abt': 'Total continued weeks claimed under a state additional benefit program for those states which have such a program. (Includes UCFE and UCX.)',
-            'abui': 'That part of ABT which represents only state UI additional continued weeks claimed for those states which have such a program.',
-            'at': 'Average adjusted Total Continued Weeks Claimed.',
-            'ce': 'Covered employment. 12-month average monthly covered employment for first 4 of last 6 completed quarters. Will only change once per quarter.',
-            'r': 'Rate of insured unemployment.',
-            'ar': 'Average Rate of Insured Employment in Prior Two Years',
-            'p': 'Current Rate as Percent of Average Rate in Prior Two Years',
-            'status': 'Beginning or Ending of State Extended Benefit Period',
-            'changedate': 'If status has changed since prior week, date which change is effective.'
-        }
+    #     column_descriptions = {
+    #         'ic': 'State UI Initial Claims, less intrastate transitional.',
+    #         'fic': 'UCFE-no UI Initial Claims.',
+    #         'xic': 'UCX only Initial Claims',
+    #         'wsic': 'STC or workshare total initial claims',
+    #         'wseic': 'STC or workshare equivalent initial claims',
+    #         'cw': 'State UI adjusted continued weeks claimed',
+    #         'fcw': 'UCFE-no UI adjusted continued weeks claimed',
+    #         'xcw': 'UCX only adjusted continued weeks claimed',
+    #         'wscw': 'STC or workshare total continued weeks claimed',
+    #         'wsecw': 'STC or workshare equivalent continued weeks claimed',
+    #         'ebt': 'Total continued weeks claimed under the Federal/State Extended Benefit Program--includes all intrastate and interstate continued weeks claimed filed from an agent state under the state UI, UCFE and UCX programs.',
+    #         'ebui': 'That part of EBT which represents only state UI weeks claimed under the Federal/State EB program.',
+    #         'abt': 'Total continued weeks claimed under a state additional benefit program for those states which have such a program. (Includes UCFE and UCX.)',
+    #         'abui': 'That part of ABT which represents only state UI additional continued weeks claimed for those states which have such a program.',
+    #         'at': 'Average adjusted Total Continued Weeks Claimed.',
+    #         'ce': 'Covered employment. 12-month average monthly covered employment for first 4 of last 6 completed quarters. Will only change once per quarter.',
+    #         'r': 'Rate of insured unemployment.',
+    #         'ar': 'Average Rate of Insured Employment in Prior Two Years',
+    #         'p': 'Current Rate as Percent of Average Rate in Prior Two Years',
+    #         'status': 'Beginning or Ending of State Extended Benefit Period',
+    #         'changedate': 'If status has changed since prior week, date which change is effective.'
+    #     }
 
-        stclaims.set_index(['state', 'weekending'], inplace=True)
+    #     stclaims.set_index(['state', 'weekending'], inplace=True)
 
-        # Attributes
-        stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a multiindex with state (string) and weekending (Timestamps reflecting the Saturday the week ends). You can access subsets of the dataset using syntax like: stclaims.xs('2025-9-13', level='weekending').index.tolist(). Be careful that not all states appear in every week."""
-        stclaims.attrs['series'] = column_descriptions
-        stclaims.attrs['date_created'] = pd.Timestamp.now().date()
+    #     # Attributes
+    #     stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a multiindex with state (string) and weekending (Timestamps reflecting the Saturday the week ends). You can access subsets of the dataset using syntax like: stclaims.xs('2025-9-13', level='weekending').index.tolist(). Be careful that not all states appear in every week."""
+    #     stclaims.attrs['series'] = column_descriptions
+    #     stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
-        if save_file: stclaims.to_pickle(save_file)
-        if cache: _save_cached_data(stclaims, source, pivot, freq)
-        return stclaims
+    #     if save_file: stclaims.to_pickle(save_file)
+    #     if cache: _save_cached_data(stclaims, source, pivot, freq)
+    #     return stclaims
     
     if source=='nipa-pce':
 
@@ -421,9 +418,9 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         return data
 
 def pull_bls_series(series_list: Union[str, List],
-    start_year: Optional[int] = None,
-    end_year: Optional[int] = None,
-    save_file: Optional[str] = None):
+    date_range = None,
+    save_file: Optional[str] = None,
+    force_refresh=False):
 
     """
     Pull single or multiple data series from the BLS.
@@ -435,11 +432,11 @@ def pull_bls_series(series_list: Union[str, List],
         or
         ['CUUR0000SA0','SUUR0000SA0']
 
-    Optional: start_year : int
+    Optional: date_range: tuple
+        e.g. ('2020', '2021') or ('2020-3', '2021-6')
 
-        for example, 2014.
-    Optional: end_year : int
-        for example, 2024.
+    Optional: save_file - save as pickle
+        e.g. 'data.pkl'
 
     Returns a pivot table with a DateTimeIndex and the series_list as columns.
 
@@ -449,32 +446,43 @@ def pull_bls_series(series_list: Union[str, List],
     if isinstance(series_list, str):
         series_list = [series_list]
 
-    json_dict = {'seriesid': series_list}
-    if start_year: json_dict['startyear'] = start_year
-    if end_year: json_dict['endyear'] = end_year
+    valid_sources = [
+        'ce',
+        'ln',
+        'ci',
+        'jt',
+        'cu',
+        'pc',
+        'wp',
+        'ei'
+    ]
 
-    # BLS API
-    p = requests.post('https://api.bls.gov/publicAPI/v2/timeseries/data/', data=json.dumps(json_dict), headers={'Content-type': 'application/json'})
+    data_list = []
+    for series in series_list:
+        
+        if series[0:2].lower() not in valid_sources:
+            raise ValueError(
+            f"Invalid source: '{source}'. "
+            """
+            Please choose a series from one of the following BLS sources:
+            'ce': Establishment Survey
+            'ln': Household Survey
+            'ci': ECI
+            'jt': JOLTS
+            'cu': CPI
+            'pc': PPI Industry
+            'wp': PPI Commodity
+            'ei': Import and Export Price Indices
+            """
+        )
 
-    # Extract the list of series
-    json_data = json.loads(p.text)['Results']['series']
-
-    # Load data into dataframe
-    dfs = []
-    for item in json_data:
-        series_id = item['seriesID']
-        df = pd.DataFrame(item['data'])
-        df['series_id'] = series_id
-        dfs.append(df)
-    data = pd.concat(dfs, ignore_index=True)
-
-    data['value'] = pd.to_numeric(data['value'])
-
-    data['month'] = data['period'].apply(lambda x: pd.NA if (x=='M13') or (x=='A01') or (x[0]=='Q') else int(x[1:]))
-    data['date'] = pd.to_datetime(data['year'].astype(str) + '-' + data['month'].astype(str), format='%Y-%m')
-    data = data[['date', 'value', 'series_id']].pivot_table(values = 'value', index = 'date', columns = 'series_id')
-    data = data.asfreq('MS')
+        if date_range:
+            individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh).loc[date_range[0]:date_range[1]][series]
+        else:
+            individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh)[series]
+        data_list.append(individual_series)
+    
+    data = pd.concat(data_list, axis=1)
 
     if save_file: data.to_pickle(save_file)
-
     return data
