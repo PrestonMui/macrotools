@@ -5,7 +5,7 @@ build-backend = 'setuptools.build_meta'
 [project]
 name = 'macrotools'
 version = '0.1.0'
-description = 'Employ America tools for working with and displaying macroeconomic data.'
+description = 'Employ America tools for pulling and graphing U.S. macroeconomic data.'
 authors = [
     {name = 'Preston Mui', email = 'preston@employamerica.org'}
 ]
