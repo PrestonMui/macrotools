@@ -29,11 +29,9 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         'cu': CPI (all Urban Consumers)
         'pc': PPI Industry Data
         'wp': PPI Commodity Data
-
-        Not yet implemented:
-        'ppi': Producer Price Index
-        'ipi': Import Price Index.
-        'nipa': National Income and Product Accounts
+        'ei': Import/Export Price Index
+        'nipa-pce': NIPA PCE Data
+        'stclaims': State-level unemployment claims
 
     email : str
         Provide an email address to pull files from the BLS.
@@ -57,6 +55,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         'pc',
         'wp',
         'ei',
+        'stclaims',
         'nipa-pce',
         'ny-mfg',
         'ny-svc',
@@ -86,6 +85,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
             'wp': PPI Commodity
             'ei': Import and Export Price Indices
             'nipa-pce': Monthly NIPA PCE Data
+            'stclaims': State-level claims
             'ny-mfg': NYFed Empire Survey
             'ny-svc': NYFed Services Survey
             'philly-mfg': Philly Fed Mfg Survey
@@ -189,77 +189,94 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         if cache: _save_cached_data(data, source, pivot, freq)
         return data
 
-    # if source=='stclaims':
+    if source=='stclaims':
 
-    #     # Pull flat file data
-    #     webbrowser.open_new_tab('https://oui.doleta.gov/unemploy/csv/ar539.csv')
-    #     stclaims_path = input('The DOL website does not permit bot access. I have opened the State-level unemployment data in a new browser. Please save the file and write the path, without quote marks, in this box, e.g.: C:/Users/prest/test/stclaims.csv ; if you input nothing I will look for the file in data/stclaims.csv ; Press Enter to Continue AFTER the file has finished downloading')
+        # Pull flat file data
+        webbrowser.open_new_tab('https://oui.doleta.gov/unemploy/csv/ar539.csv')
+        stclaims_path = input('The DOL website does not permit bot access. I have opened the State-level unemployment data in a new browser. Please save the file and write the path, without quote marks, in this box, e.g.: C:/Users/prest/test/ar539.csv ; if you input nothing I will look for the file in data/ar539.csv ; Press Enter to Continue AFTER the file has finished downloading')
 
-    #     if stclaims_path=='':
-    #         stclaims = pd.read_csv('data/stclaims.csv', parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'])
-    #     else:
-    #         stclaims = pd.read_csv(stclaims_path, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'])
+        if stclaims_path=='':
+            filepath = 'data/ar539.csv'
+        else:
+            filepath = stclaims_path        
+        stclaims = pd.read_csv(filepath, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'], low_memory=False)
 
-    #     stclaims.rename(columns={
-    #        'st': 'state',
-    #        'c1': 'weeknumber',
-    #        'c2': 'weekending',
-    #        'c3': 'ic',
-    #        'c4': 'fic',
-    #        'c5': 'xic',
-    #        'c6': 'wsic',
-    #        'c7': 'wseic',
-    #        'c8': 'cw',
-    #        'c9': 'fcw',
-    #        'c10': 'xcw',
-    #        'c11': 'wscw',
-    #        'c12': 'wsecw',
-    #        'c13': 'ebt',
-    #        'c14': 'ebui',
-    #        'c15': 'abt',
-    #        'c16': 'abui',
-    #        'c17': 'at',
-    #        'c18': 'ce',
-    #        'c19': 'r',
-    #        'c20': 'ar',
-    #        'c21': 'p',
-    #        'c22': 'status',
-    #        'c23': 'changedate'}, inplace=True)
+        stclaims.rename(columns={
+           'st': 'state',
+           'c1': 'weeknumber',
+           'c2': 'weekending',
+           'c3': 'ic',
+           'c4': 'fic',
+           'c5': 'xic',
+           'c6': 'wsic',
+           'c7': 'wseic',
+           'c8': 'cw',
+           'c9': 'fcw',
+           'c10': 'xcw',
+           'c11': 'wscw',
+           'c12': 'wsecw',
+           'c13': 'ebt',
+           'c14': 'ebui',
+           'c15': 'abt',
+           'c16': 'abui',
+           'c17': 'at',
+           'c18': 'ce',
+           'c19': 'r',
+           'c20': 'ar',
+           'c21': 'p',
+           'c22': 'status',
+           'c23': 'changedate'}, inplace=True)
 
-    #     column_descriptions = {
-    #         'ic': 'State UI Initial Claims, less intrastate transitional.',
-    #         'fic': 'UCFE-no UI Initial Claims.',
-    #         'xic': 'UCX only Initial Claims',
-    #         'wsic': 'STC or workshare total initial claims',
-    #         'wseic': 'STC or workshare equivalent initial claims',
-    #         'cw': 'State UI adjusted continued weeks claimed',
-    #         'fcw': 'UCFE-no UI adjusted continued weeks claimed',
-    #         'xcw': 'UCX only adjusted continued weeks claimed',
-    #         'wscw': 'STC or workshare total continued weeks claimed',
-    #         'wsecw': 'STC or workshare equivalent continued weeks claimed',
-    #         'ebt': 'Total continued weeks claimed under the Federal/State Extended Benefit Program--includes all intrastate and interstate continued weeks claimed filed from an agent state under the state UI, UCFE and UCX programs.',
-    #         'ebui': 'That part of EBT which represents only state UI weeks claimed under the Federal/State EB program.',
-    #         'abt': 'Total continued weeks claimed under a state additional benefit program for those states which have such a program. (Includes UCFE and UCX.)',
-    #         'abui': 'That part of ABT which represents only state UI additional continued weeks claimed for those states which have such a program.',
-    #         'at': 'Average adjusted Total Continued Weeks Claimed.',
-    #         'ce': 'Covered employment. 12-month average monthly covered employment for first 4 of last 6 completed quarters. Will only change once per quarter.',
-    #         'r': 'Rate of insured unemployment.',
-    #         'ar': 'Average Rate of Insured Employment in Prior Two Years',
-    #         'p': 'Current Rate as Percent of Average Rate in Prior Two Years',
-    #         'status': 'Beginning or Ending of State Extended Benefit Period',
-    #         'changedate': 'If status has changed since prior week, date which change is effective.'
-    #     }
+        column_descriptions = {
+            'ic': 'State UI Initial Claims, less intrastate transitional.',
+            'fic': 'UCFE-no UI Initial Claims.',
+            'xic': 'UCX only Initial Claims',
+            'wsic': 'STC or workshare total initial claims',
+            'wseic': 'STC or workshare equivalent initial claims',
+            'cw': 'State UI adjusted continued weeks claimed',
+            'fcw': 'UCFE-no UI adjusted continued weeks claimed',
+            'xcw': 'UCX only adjusted continued weeks claimed',
+            'wscw': 'STC or workshare total continued weeks claimed',
+            'wsecw': 'STC or workshare equivalent continued weeks claimed',
+            'ebt': 'Total continued weeks claimed under the Federal/State Extended Benefit Program--includes all intrastate and interstate continued weeks claimed filed from an agent state under the state UI, UCFE and UCX programs.',
+            'ebui': 'That part of EBT which represents only state UI weeks claimed under the Federal/State EB program.',
+            'abt': 'Total continued weeks claimed under a state additional benefit program for those states which have such a program. (Includes UCFE and UCX.)',
+            'abui': 'That part of ABT which represents only state UI additional continued weeks claimed for those states which have such a program.',
+            'at': 'Average adjusted Total Continued Weeks Claimed.',
+            'ce': 'Covered employment. 12-month average monthly covered employment for first 4 of last 6 completed quarters. Will only change once per quarter.',
+            'r': 'Rate of insured unemployment.',
+            'ar': 'Average Rate of Insured Employment in Prior Two Years',
+            'p': 'Current Rate as Percent of Average Rate in Prior Two Years',
+            'status': 'Beginning or Ending of State Extended Benefit Period',
+            'changedate': 'If status has changed since prior week, date which change is effective.'
+        }
+        
+        # Initial claims follow the report date; continuing claims follow the weekending date.
+        stclaims_rptdate = stclaims[['state','rptdate','weeknumber','ic','fic','xic','wsic','wseic']]
+        stclaims_rptdate = stclaims_rptdate.rename(columns={'rptdate': 'weekending'})
+        stclaims_weekending = stclaims.drop(['rptdate','weeknumber','ic','fic','xic','wsic','wseic'], axis=1)
+        stclaims = pd.merge(stclaims_rptdate, stclaims_weekending, on=['state', 'weekending'], how='left')
+        
+        stclaims['initial_claims'] = stclaims['ic'] + stclaims['wseic']
+        stclaims['continuing_claims'] = stclaims['cw'] + stclaims['wsecw']
 
-    #     stclaims.set_index(['state', 'weekending'], inplace=True)
+        # Pivot Table (dates as rows, variables and states as columns)
+        stclaims = stclaims.pivot_table(
+            index='weekending',
+            columns='state',
+            aggfunc='first'  # use 'first' since there should be one value per state-week combo
+        )
+        stclaims.columns.names = ['variable', 'state']
+        stclaims = stclaims.asfreq('W-SAT')
 
-    #     # Attributes
-    #     stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a multiindex with state (string) and weekending (Timestamps reflecting the Saturday the week ends). You can access subsets of the dataset using syntax like: stclaims.xs('2025-9-13', level='weekending').index.tolist(). Be careful that not all states appear in every week."""
-    #     stclaims.attrs['series'] = column_descriptions
-    #     stclaims.attrs['date_created'] = pd.Timestamp.now().date()
+        # Attributes
+        stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a pivot table where rows are weekending (Timetamps reflecting the Saturday the week ends); columns are data types and states. Be careful that not all states appear in every week."""
+        stclaims.attrs['series'] = column_descriptions
+        stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
-    #     if save_file: stclaims.to_pickle(save_file)
-    #     if cache: _save_cached_data(stclaims, source, pivot, freq)
-    #     return stclaims
+        if save_file: stclaims.to_pickle(save_file)
+        if cache: _save_cached_data(stclaims, source, pivot, freq)
+        return stclaims
     
     if source=='nipa-pce':
 
