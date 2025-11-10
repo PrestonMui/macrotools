@@ -40,26 +40,27 @@ eacolors = {
 # GRAPHING FUNCTION
 ########################################
 
-def tsgraph(xdata: Union[List, np.ndarray, Dict], 
-                 ydata: Union[List, np.ndarray, Dict], 
-                 y2data: Optional[Union[List, np.ndarray, Dict]] = None,
-                 format_info: Optional[Dict] = None,
-                 save_file: Optional[str] = None):
+def tsgraph(ydata: Union[List, np.ndarray, Dict], 
+            y2data: Optional[Union[List, np.ndarray, Dict]] = None,
+            xdata: Optional[Union[List, np.ndarray, Dict]] = None, 
+            format_info: Optional[Dict] = None,
+            save_file: Optional[str] = None):
     """
     Create a customizable graph with flexible formatting options in EA House Style.
     
     Parameters:
     -----------
-    xdata : list or array-like
-        X-axis data points
-        - list if your x-axis is the same for all y series
-        - Dict with {label: data} if not. labels must match labels used in ydata and be unique.
     ydata : array-like or dict, optional
         Y-axis data points. Can be:
         - Single list/array for one series
         - Dict with {label: data} for one or multiple series
     y2data: dict, optional
         RHS Y-axis data points. Must be a Dictionary in the form of {label: data} even if there is only one series.
+    xdata : list or array-like, optional
+        X-axis data points
+        - list if your x-axis is the same for all y series
+        - Dict with {label: data} if not. labels must match labels used in ydata and be unique.
+        - Optional argument--if you pass a DataFrame or Series, will use th index.
     format_info: dict, optional
     save_file: str, optional
             
@@ -179,16 +180,32 @@ def tsgraph(xdata: Union[List, np.ndarray, Dict],
         def_title_y = 1.1
         def_subtitle_y = 1.03
 
-    # Number of Series
-    series_count = len(ydata) if isinstance(ydata, dict) else 1
-    if y2data: series2_count = len(y2data) if isinstance(y2data, dict) else 1
+    # Number of Series: if DataFrame, use number of columns; if Dictionary, length, else, 1.
+    if isinstance(ydata, dict):
+        series_count = len(ydata)
+    elif isinstance(ydata, pd.DataFrame):
+        series_count = ydata.shape[1]
+    else:
+        series_count = 1
+    
+    if y2data:
+        if isinstance(y2data, dict):
+            series2_count = len(y2data)
+        elif isinstance(y2data, pd.DataFrame):
+            series2_count = y2data.shape[1]
+        else:
+            series2_count = 1
+
     total_series = series_count + series2_count if y2data else series_count
 
-    if isinstance(xdata, Dict) and len(xdata)!=total_series:
-        raise Exception('Number of xdata series does not match numberf y and y2data series')
-    if isinstance(xdata, Dict) and y2data:
-        if ydata.keys() & y2data.keys(): raise Exception('You have overlapping series keys in ydata and y2data. Please use unique keys.')
+    # xdata - check that the number of xdata inputs is correct
+    if xdata is not None:
+        if isinstance(xdata, Dict) and len(xdata)!=total_series:
+            raise Exception('Number of xdata series does not match number of y and y2data series')
+        if isinstance(xdata, Dict) and y2data:
+            if ydata.keys() & y2data.keys(): raise Exception('You have overlapping series keys in ydata and y2data. Please use unique keys.')
 
+    # Formatting info
     default_format = {
 		'title': '',
 		'title_y': def_title_y,
@@ -244,66 +261,102 @@ def tsgraph(xdata: Union[List, np.ndarray, Dict],
         ########################################    
         # Create Plots
         ########################################
-        
-        # Convert single values fmt to lists for iteration
-        line_styles = [fmt['line_style']] * series_count if isinstance(fmt['line_style'], str) else fmt['line_style']
-        line_widths = [fmt['line_width']] * series_count if isinstance(fmt['line_width'], (int, float)) else fmt['line_width']
 
-        # If Colors are not specified, use default stylesheet colors
-        if isinstance(fmt['colors'], list):
-            colors = fmt['colors']
-        elif isinstance(fmt['colors'], str):
-            colors = [fmt['colors']] * series_count
-        else: colors = None
-
-        # Plot Left-hand Y-axis Series
-        if not isinstance(ydata, dict):
-            plot_kwargs = {'linestyle': line_styles[0], 'linewidth': line_widths[0]}            
-            if colors and colors[0]: plot_kwargs['color'] = colors[i % len(colors)]
-            ax.plot(xdata, ydata, **plot_kwargs)
-
-        elif isinstance(ydata, dict):
-            for i, (label, y) in enumerate(ydata.items()):
-                plot_kwargs = {
-                    'label': label,
-                    'linestyle': line_styles[i] if i < len(line_styles) else '-',
-                    'linewidth': line_widths[i] if i < len(line_widths) else 2
-                }
-                
-                if colors and colors[i]:
-                    plot_kwargs['color'] = colors[i % len(colors)]
-
-                if isinstance(xdata, Dict):
-                    ax.plot(xdata[label], y, **plot_kwargs)
-                else:
-                    ax.plot(xdata, y, **plot_kwargs)
-
+        # Plot Data
         if y2data:
+            data_list = [ydata, y2data]
+        else:
+            data_list = [ydata]
 
-            line2_styles = [fmt['line2_style']] * series2_count if isinstance(fmt['line2_style'], str) else fmt['line2_style']
-            line2_widths = [fmt['line2_width']] * series2_count if isinstance(fmt['line2_width'], (int, float)) else fmt['line2_width']
+        for i, (data) in enumerate(data_list):
 
-            if isinstance(fmt['colors2'], list):
-                colors2 = fmt['colors2']
-            elif isinstance(fmt['colors2'], str):
-                colors2 = [fmt['colors2']] * series2_count
+            if i==0:
+                sfx = ''
+                plotaxs = ax
+            elif i==1:
+                sfx = '2'
+                plotaxs = ax2
+
+            # Create list of line styles, line widths
+            line_styles = [fmt[f'line{sfx}_style']] * series_count if isinstance(fmt[f'line{sfx}_style'], str) else fmt[f'line{sfx}_style']
+            line_widths = [fmt[f'line{sfx}_width']] * series_count if isinstance(fmt[f'line{sfx}_width'], (int, float)) else fmt[f'line{sfx}_width']
+
+            # Create list of colors. If colors are not specified, use stylesheet colors
+            if isinstance(fmt[f'colors{sfx}'], list):
+                colors = fmt[f'colors{sfx}']
+            elif isinstance(fmt['colors'], str):
+                colors = [fmt[f'colors{sfx}']] * series_count
             else:
-                colors2 = style_colors[series_count:min(series_count + series2_count, len(style_colors))]
+                if i==0: colors = None
+                if i==1: colors = style_colors[series_count:min(series_count + series2_count, len(style_colors))]
 
-            for i, (label2, y2) in enumerate(y2data.items()):
-                plot_kwargs = {
-                    'label': label2,
-                    'linestyle': line2_styles[i] if i < len(line2_styles) else '-',
-                    'linewidth': line2_widths[i] if i < len(line2_widths) else 2
-                }
+            # For DataFrame inputs, plot each column and label according to 
+            if isinstance(data, pd.DataFrame):
+            
+                for j, (col) in enumerate(data.columns):
+                    
+                    plot_kwargs = {
+                        'label': col,
+                        'linestyle': line_styles[j] if j < len(line_styles) else '-',
+                        'linewidth': line_widths[j] if j < len(line_widths) else 2
+                    }
+                    if colors and colors[j]:
+                        plot_kwargs['color'] = colors[j % len(colors)]
+                    
+                    if xdata is not None:
+                        if isinstance(xdata, Dict):
+                            plotaxs.plot(xdata[label], data[col], **plot_kwargs)
+                        else:
+                            plotaxs.plot(xdata, data[col], **plot_kwargs)
+                    else:
+                        plotaxs.plot(data.index, data[col], **plot_kwargs)
+
+            # For dictionary inputs, plot input with the label provided
+            elif isinstance(data, dict):
+
+                for j, (label, y) in enumerate(data.items()):
                 
-                if colors2 and colors2[i]:
-                    plot_kwargs['color'] = colors2[i % len(colors2)]
+                    plot_kwargs = {
+                        'label': label,
+                        'linestyle': line_styles[j] if j < len(line_styles) else '-',
+                        'linewidth': line_widths[j] if j < len(line_widths) else 2
+                    }
+                    
+                    if colors and colors[j]:
+                        plot_kwargs['color'] = colors[j % len(colors)]
 
-                if isinstance(xdata, Dict):
-                    ax2.plot(xdata[label2], y2, **plot_kwargs)
+                    if xdata is not None:
+                        if isinstance(xdata, Dict):
+                            plotaxs.plot(xdata[label], y, **plot_kwargs)
+                        else:
+                            plotaxs.plot(xdata, y, **plot_kwargs)
+                    else:
+                        if isinstance(y, pd.Series):
+                            plotaxs.plot(y.index, y, **plot_kwargs)
+                        else:
+                            raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
+
+            # For a single data series input, plot data labeled with the data series column
+            elif isinstance(data, pd.Series):
+
+                plot_kwargs = {'label': data.name, 'linestyle': line_styles[0], 'linewidth': line_widths[0]}            
+                
+                if colors and colors[0]: plot_kwargs['color'] = colors[0]
+                if xdata is not None:
+                    plotaxs.plot(xdata, data, **plot_kwargs)
                 else:
-                    ax2.plot(xdata, y2, **plot_kwargs)
+                    plotaxs.plot(data.index, data, **plot_kwargs)
+
+            # Otherwise, plot the data
+            else:
+                
+                plot_kwargs = {'linestyle': line_styles[0], 'linewidth': line_widths[0]}     
+
+                if colors and colors[0]: plot_kwargs['color'] = colors[0]
+                if xdata is not None:
+                    plotaxs.plot(xdata, ydata, **plot_kwargs)
+                else:
+                    raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
         
         ########################################
         # Apply Formatting
@@ -311,10 +364,10 @@ def tsgraph(xdata: Union[List, np.ndarray, Dict],
 
         # Apply Title Formatting
         if fmt['subtitle']:
-        	ax.text(0.5, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'], transform=ax.transAxes, ha='center')
-        	ax.text(0.5, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'], transform=ax.transAxes, ha='center')
+            ax.text(0.5, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'], transform=ax.transAxes, ha='center')
+            ax.text(0.5, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'], transform=ax.transAxes, ha='center')
         else:
-        	ax.text(0.5, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'], transform=ax.transAxes, ha='center')
+            ax.text(0.5, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'], transform=ax.transAxes, ha='center')
 
         # Apply axis formating
         if fmt['xlabel']:
