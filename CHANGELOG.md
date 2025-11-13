@@ -2,6 +2,11 @@
 
 ## Version 0
 
+### Version 0.1.3
+- Added Consumer Expenditures ('cx') to pull_data and pull_bls_series.
+- Removed `freq` as option for pull_data.
+- Added function search_bls_series.
+
 ### Version 0.1.2
 - Re-added ability to pull state-level claims data.
 - Changed tsgraph function to no longer require an xdata entry, and to look at the index of ydata for x data points.
