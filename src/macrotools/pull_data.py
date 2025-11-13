@@ -13,7 +13,7 @@ from .storage import (
 )
 
 @timer
-def pull_data(source, email = None, pivot = True, save_file = None, freq='M', force_refresh=False, cache=True):
+def pull_data(source, email = None, pivot = True, save_file = None, force_refresh=False, cache=True):
 
     """
     Pull full data files from BLS and BEA.
@@ -30,6 +30,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         'pc': PPI Industry Data
         'wp': PPI Commodity Data
         'ei': Import/Export Price Index
+        'cx': Consumer Expenditures
         'nipa-pce': NIPA PCE Data
         'stclaims': State-level unemployment claims
 
@@ -55,6 +56,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         'pc',
         'wp',
         'ei',
+        'cx', 
         'stclaims',
         'nipa-pce',
         'ny-mfg',
@@ -83,6 +85,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
             'cu': CPI
             'pc': PPI Industry
             'wp': PPI Commodity
+            'cx': Consumer Expenditures
             'ei': Import and Export Price Indices
             'nipa-pce': Monthly NIPA PCE Data
             'stclaims': State-level claims
@@ -101,9 +104,9 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         )
 
     # Check cache first
-    cache_file = _get_cache_file_path(source, pivot, freq)
+    cache_file = _get_cache_file_path(source, pivot)
     if cache and not force_refresh and not _should_refresh_cache(cache_file):
-        cached_data = _load_cached_data(source, pivot, freq)
+        cached_data = _load_cached_data(source, pivot)
         if cached_data is not None:
             if save_file:
                 cached_data.to_pickle(save_file)
@@ -112,7 +115,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
     print(f"Pulling data from source: {source}")
 
     # Format flatfile -- BLS Sources
-    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei']:
+    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx']:
 
         email = _get_email_for_bls(email)
 
@@ -124,7 +127,8 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
             'cu': 'cu.data.0.Current',
             'pc': 'pc.data.0.Current',
             'wp': 'wp.data.0.Current',
-            'ei': 'ei.data.0.Current'
+            'ei': 'ei.data.0.Current',
+            'cx': 'cx.data.1.AllData'
         }
 
         base_url = 'https://download.bls.gov/pub/time.series/' + source + '/'
@@ -172,11 +176,19 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
                 data = data.pivot_table(values = 'value', index = 'period', columns = 'series_id')
                 data = data.asfreq('Q')
 
+            if source in ['cx']:
+                data = data[['series_id', 'value', 'year']]
+                data['period'] = pd.PeriodIndex(data['year'].astype(str), freq='Y-JAN')
+                data = data.drop('year', axis=1)
+
+                data = data.pivot_table(values = 'value', index = 'period', columns = 'series_id')
+                data = data.asfreq('Y')
+
         # Attributes
         data.attrs['data description'] = ''
 
         # Series
-        if source in ['ln','ce', 'ci', 'cu','pc','wp']:
+        if source in ['ln','ce', 'ci', 'cu','pc','wp','cx']:
             r = requests.get(series_url, headers=headers)
             series = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
             series.columns = series.columns.str.strip()
@@ -186,7 +198,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
             data.attrs['series'] = series_dict
 
         if save_file: data.to_pickle(save_file)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
 
     if source=='stclaims':
@@ -275,13 +287,14 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
         if save_file: stclaims.to_pickle(save_file)
-        if cache: _save_cached_data(stclaims, source, pivot, freq)
+        if cache: _save_cached_data(stclaims, source, pivot)
         return stclaims
     
     if source=='nipa-pce':
 
-        if freq!='M':
-            raise ValueError('Currently only frequency \'M\' is supported.')
+        print('Pulling Monthly NIPA-PCE data.')
+
+        freq = M
 
         url_nipa = 'https://apps.bea.gov/national/Release/TXT/NipaData' + freq + '.txt'
         r = requests.get(url_nipa)
@@ -313,7 +326,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
         data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
         data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='ny-mfg':
@@ -324,7 +337,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
         data.set_index('date', inplace=True)
 
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='ny-svc':
@@ -335,7 +348,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
         data.set_index('date', inplace=True)
 
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='philly-mfg':
@@ -349,7 +362,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data.drop(columns='DATE', axis=1, inplace=True)
         data.set_index('date', inplace=True)
 
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
 
     if source=='philly-nonmfg':
@@ -357,7 +370,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/NBOS/nboshistory.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='richmond-mfg':
@@ -365,7 +378,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/manufacturing/data/mfg_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='richmond-nonmfg':
@@ -373,7 +386,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/services/data/nmf_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='dallas-mfg':
@@ -382,7 +395,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
         data.drop(columns='Date', axis=1, inplace=True)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
 
     if source=='dallas-svc':
@@ -390,7 +403,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['date'], format='%b-%y')
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
 
     if source=='dallas-retail':
@@ -399,7 +412,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
         data.drop(columns='Date', axis=1, inplace=True)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
     
     if source=='kc-mfg':
@@ -415,7 +428,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data = data.drop([0,1, 16, 17, 32, 33, 48, 49, 64, 65])
 
         data = data.set_index('Unnamed: 0').transpose()
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
 
     if source=='kc-svc':
@@ -431,7 +444,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, freq='M', fo
         data = data.drop([0,1, 13, 14, 15, 27, 28, 29, 43, 44, 45, 57, 58, 59])
 
         data = data.set_index('Unnamed: 0').transpose()
-        if cache: _save_cached_data(data, source, pivot, freq)
+        if cache: _save_cached_data(data, source, pivot)
         return data
 
 def pull_bls_series(series_list: Union[str, List],
@@ -471,7 +484,8 @@ def pull_bls_series(series_list: Union[str, List],
         'cu',
         'pc',
         'wp',
-        'ei'
+        'ei',
+        'cx'
     ]
 
     data_list = []
@@ -490,6 +504,7 @@ def pull_bls_series(series_list: Union[str, List],
             'pc': PPI Industry
             'wp': PPI Commodity
             'ei': Import and Export Price Indices
+            'cx': Consumer Expenditures Survey
             """
         )
 
