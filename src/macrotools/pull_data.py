@@ -518,3 +518,33 @@ def pull_bls_series(series_list: Union[str, List],
 
     if save_file: data.to_pickle(save_file)
     return data
+
+def search_bls_series(source, string_list):
+
+    """
+    Function to search the 'series' attribute on series dictionaries in pulled BLS data.
+    
+    Parameters:
+    -----------
+    source: a dataset pulled by pull_data, or one that has a series dictionary stored in source.attrs['series']
+
+    string_list: a list of strings you want to find in the series names.
+
+    How it works:
+    -----------
+    search_bls series finds every series name in source.attrs['series'] that contains each string in string_list (case-insensitive). A series name must contain every string in string_list to be returned. search_bls returns a dictionary of series ids and names.
+
+    Example:
+    -----------
+    import macrotools as mt
+    cedata = mt.pull_data('ce')
+    found_series = search_bls_series(cedata, ['Average Hourly Earnings', 'nonsupervisory', 'mining', 'seAsOnaLly aDjusTed'])
+    """
+
+    found_keys = []
+    for (key, value) in source.attrs['series'].items():
+        if all(string.casefold() in value.casefold() for string in string_list):
+            found_keys.append(key)
+    
+    print(f'Found {len(found_series)} series that match your search.')
+    return {k: source.attrs['series'][k] for k in found_keys}
