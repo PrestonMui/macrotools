@@ -26,11 +26,11 @@ def _get_cache_dir():
     return Path.home() / '.macrodata_cache'
 
 
-def _get_cache_file_path(source: str, pivot: bool, freq: str) -> Path:
+def _get_cache_file_path(source: str, pivot: bool) -> Path:
     """Generate cache file path for given parameters."""
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f'{source}_{pivot}_{freq}.pkl'
+    return cache_dir / f'{source}_{pivot}.pkl'
 
 
 def _get_cache_age_days(cache_file: Path) -> Optional[float]:
@@ -50,9 +50,9 @@ def _should_refresh_cache(cache_file: Path, ttl_days: int = 7) -> bool:
     return age >= ttl_days
 
 
-def _load_cached_data(source: str, pivot: bool, freq: str) -> Optional[pd.DataFrame]:
+def _load_cached_data(source: str, pivot: bool) -> Optional[pd.DataFrame]:
     """Load data from cache if it exists and is valid."""
-    cache_file = _get_cache_file_path(source, pivot, freq)
+    cache_file = _get_cache_file_path(source, pivot)
     if cache_file.exists():
         try:
             data = pd.read_pickle(cache_file)
@@ -65,28 +65,27 @@ def _load_cached_data(source: str, pivot: bool, freq: str) -> Optional[pd.DataFr
     return None
 
 
-def _save_cached_data(data: pd.DataFrame, source: str, pivot: bool, freq: str) -> None:
+def _save_cached_data(data: pd.DataFrame, source: str, pivot: bool) -> None:
     """Save data to cache."""
-    cache_file = _get_cache_file_path(source, pivot, freq)
+    cache_file = _get_cache_file_path(source, pivot)
     try:
         data.to_pickle(cache_file)
     except Exception as e:
         print(f"Warning: Could not save cache for {source}: {e}")
 
 
-def get_cache_age(source: str, pivot: bool = True, freq: str = 'M') -> Optional[float]:
+def get_cache_age(source: str, pivot: bool = True) -> Optional[float]:
     """
     Get age of cached data in days.
 
     Parameters:
         source : str; Data source (e.g., 'ce', 'nipa-pce')
         pivot : bool; Whether data is pivoted
-        freq : str; Frequency ('M', 'Q', etc.)
 
     Returns:
         float or None; Age in days if cached, None if not cached
     """
-    cache_file = _get_cache_file_path(source, pivot, freq)
+    cache_file = _get_cache_file_path(source, pivot)
     return _get_cache_age_days(cache_file)
 
 
