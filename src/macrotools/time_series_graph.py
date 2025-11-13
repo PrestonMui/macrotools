@@ -386,7 +386,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         if fmt['ytickformat']=='pctg':
             ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['ydecimals']))
         elif fmt['ytickformat']=='dec':
-            ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt['ydecimals']}f}}'))
+            ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["ydecimals"]}f}}'))
 
         if fmt['xaxiscross'] is not None:
             ax.axhline(y=fmt['xaxiscross'], color='black', linewidth=0.8)
