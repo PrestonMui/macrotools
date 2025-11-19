@@ -262,25 +262,24 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         }
         
         # Initial claims follow the report date; continuing claims follow the weekending date.
-        stclaims_rptdate = stclaims[['state','rptdate','weeknumber','ic','fic','xic','wsic','wseic']]
-        stclaims_rptdate = stclaims_rptdate.rename(columns={'rptdate': 'weekending'})
-        stclaims_weekending = stclaims.drop(['rptdate','weeknumber','ic','fic','xic','wsic','wseic'], axis=1)
-        stclaims = pd.merge(stclaims_rptdate, stclaims_weekending, on=['state', 'weekending'], how='left')
-        
+        stclaims_rptdate = (stclaims[['state','rptdate','weeknumber','ic','fic','xic','wsic','wseic']]
+                            .rename(columns={'rptdate': 'weekending'})
+                            .set_index(['state', 'weekending']))
+        stclaims_weekending = (stclaims
+                               .drop(['rptdate','weeknumber','ic','fic','xic','wsic','wseic'], axis=1)
+                               .set_index(['state', 'weekending']))
+        stclaims = pd.concat([stclaims_rptdate, stclaims_weekending], axis=1)
+
         stclaims['initial_claims'] = stclaims['ic'] + stclaims['wseic']
         stclaims['continuing_claims'] = stclaims['cw'] + stclaims['wsecw']
 
+        stclaims = stclaims.sort_index()
+
         # Pivot Table (dates as rows, variables and states as columns)
-        stclaims = stclaims.pivot_table(
-            index='weekending',
-            columns='state',
-            aggfunc='first'  # use 'first' since there should be one value per state-week combo
-        )
-        stclaims.columns.names = ['variable', 'state']
-        stclaims = stclaims.asfreq('W-SAT')
+        # stclaims = stclaims.asfreq('W-SAT')
 
         # Attributes
-        stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a pivot table where rows are weekending (Timetamps reflecting the Saturday the week ends); columns are data types and states. Be careful that not all states appear in every week."""
+        stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a pivot table where rows indexed by 'state' and 'weekending' (Timetamps reflecting the Saturday the week ends); columns are data types. Be careful that not all states appear in every week."""
         stclaims.attrs['series'] = column_descriptions
         stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
