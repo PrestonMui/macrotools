@@ -159,30 +159,28 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             print(f"Converting File to Pivot Table. Be aware that this will drop footnotes and only keep monthly data. If you want long data, set pivot=False")
 
             if source in ['ce', 'ln', 'jt', 'cu', 'pc', 'wp', 'ei']:
-
-                data = data[data['frequency']=='M'][['series_id','value','year','month']].copy()
+                data = data.loc[data['frequency']=='M', ['series_id','value','year','month']]
                 data['date'] = pd.to_datetime(data['year'].astype(str) + '-' + data['month'].astype(str), format='%Y-%m')
-                data = data.drop(['month','year'], axis=1)
-
-                data = data.pivot_table(values = 'value', index = 'date', columns = 'series_id')
-                data = data.asfreq('MS')
+                data = (data
+                        .drop(['month','year'], axis=1)
+                        .pivot_table(values = 'value', index = 'date', columns = 'series_id')
+                        .asfreq('MS'))
 
             if source in ['ci']:
-
-                data = data[['series_id','value','year','quarter']].copy()
+                data = data[['series_id','value','year','quarter']]
                 data['period'] = pd.PeriodIndex(data['year'].astype(str) + 'Q' + data['quarter'].astype(str), freq='Q')
-                data = data.drop(['year','quarter'], axis=1)
-
-                data = data.pivot_table(values = 'value', index = 'period', columns = 'series_id')
-                data = data.asfreq('Q')
-
+                data = (data
+                        .drop(['year','quarter'], axis=1)
+                        .pivot_table(values = 'value', index = 'period', columns = 'series_id')
+                        .asfreq('Q'))
+                
             if source in ['cx']:
                 data = data[['series_id', 'value', 'year']]
                 data['period'] = pd.PeriodIndex(data['year'].astype(str), freq='Y-JAN')
-                data = data.drop('year', axis=1)
-
-                data = data.pivot_table(values = 'value', index = 'period', columns = 'series_id')
-                data = data.asfreq('Y')
+                data = (data
+                        .drop('year', axis=1)
+                        .pivot_table(values = 'value', index = 'period', columns = 'series_id')
+                        .asfreq('Y'))
 
         # Attributes
         data.attrs['data description'] = ''
@@ -211,33 +209,33 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             filepath = 'data/ar539.csv'
         else:
             filepath = stclaims_path        
-        stclaims = pd.read_csv(filepath, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'], low_memory=False)
-
-        stclaims.rename(columns={
-           'st': 'state',
-           'c1': 'weeknumber',
-           'c2': 'weekending',
-           'c3': 'ic',
-           'c4': 'fic',
-           'c5': 'xic',
-           'c6': 'wsic',
-           'c7': 'wseic',
-           'c8': 'cw',
-           'c9': 'fcw',
-           'c10': 'xcw',
-           'c11': 'wscw',
-           'c12': 'wsecw',
-           'c13': 'ebt',
-           'c14': 'ebui',
-           'c15': 'abt',
-           'c16': 'abui',
-           'c17': 'at',
-           'c18': 'ce',
-           'c19': 'r',
-           'c20': 'ar',
-           'c21': 'p',
-           'c22': 'status',
-           'c23': 'changedate'}, inplace=True)
+        
+        stclaims = (pd.read_csv(filepath, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'], low_memory=False)
+                .rename(columns={
+                'st': 'state',
+                'c1': 'weeknumber',
+                'c2': 'weekending',
+                'c3': 'ic',
+                'c4': 'fic',
+                'c5': 'xic',
+                'c6': 'wsic',
+                'c7': 'wseic',
+                'c8': 'cw',
+                'c9': 'fcw',
+                'c10': 'xcw',
+                'c11': 'wscw',
+                'c12': 'wsecw',
+                'c13': 'ebt',
+                'c14': 'ebui',
+                'c15': 'abt',
+                'c16': 'abui',
+                'c17': 'at',
+                'c18': 'ce',
+                'c19': 'r',
+                'c20': 'ar',
+                'c21': 'p',
+                'c22': 'status',
+                'c23': 'changedate'}))
 
         column_descriptions = {
             'ic': 'State UI Initial Claims, less intrastate transitional.',
@@ -519,6 +517,16 @@ def pull_bls_series(series_list: Union[str, List],
     if save_file: data.to_pickle(save_file)
     return data
 
+def search_dict(dict, string_list):
+    
+    found_keys = []
+    for (key, value) in dict.items():
+        if all(string.casefold() in value.casefold() for string in string_list):
+            found_keys.append(key)
+    
+    print(f'Found {len(found_series)} series that match your search.')
+    return {k: dict[k] for k in found_keys}
+
 def search_bls_series(source, string_list):
 
     """
@@ -541,10 +549,4 @@ def search_bls_series(source, string_list):
     found_series = search_bls_series(cedata, ['Average Hourly Earnings', 'nonsupervisory', 'mining', 'seAsOnaLly aDjusTed'])
     """
 
-    found_keys = []
-    for (key, value) in source.attrs['series'].items():
-        if all(string.casefold() in value.casefold() for string in string_list):
-            found_keys.append(key)
-    
-    print(f'Found {len(found_series)} series that match your search.')
-    return {k: source.attrs['series'][k] for k in found_keys}
+    return search_dict(source.attrs['series'], string_list)

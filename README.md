@@ -25,7 +25,6 @@ Currently stored at [GitHub](https://github.com/PrestonMui/macrotools.git).
 
 Some features I am working on.
 
-[x] Store email, API keys etc in a settings file; eliminate need to enter email with every BLS pull
-[] BLS series pull -- allow for > 10 years data pulling at once
-[] Wrapper for FRED API -- allow for pulling multiple series 
-[x] Upload to PyPi
+[] Wrapper for FRED API -- allow for pulling multiple series
+
+[] Some way to search through BLS series to figure out which series_id you'd like to call
