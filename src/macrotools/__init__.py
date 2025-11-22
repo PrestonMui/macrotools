@@ -27,6 +27,7 @@ from .time_series import (
 from .pull_data import (
 	pull_data,
 	pull_bls_series,
+	search_bls_series
 )
 
 from .storage import (
