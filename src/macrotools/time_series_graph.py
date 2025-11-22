@@ -188,7 +188,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
     else:
         series_count = 1
     
-    if y2data:
+    if y2data is not None:
         if isinstance(y2data, dict):
             series2_count = len(y2data)
         elif isinstance(y2data, pd.DataFrame):
@@ -196,7 +196,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         else:
             series2_count = 1
 
-    total_series = series_count + series2_count if y2data else series_count
+    total_series = series_count + series2_count if y2data is not None else series_count
 
     # xdata - check that the number of xdata inputs is correct
     if xdata is not None:
@@ -255,7 +255,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         # Figure and Axes
         ########################################
         fig, ax = plt.subplots(figsize=fmt['figsize'])
-        if y2data:
+        if y2data is not None:
             ax2 = fig.axes[0].twinx()
 
         ########################################    
@@ -263,7 +263,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         ########################################
 
         # Plot Data
-        if y2data:
+        if y2data is not None:
             data_list = [ydata, y2data]
         else:
             data_list = [ydata]
@@ -398,7 +398,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         	ax.xaxis.set_major_locator(mdates.MonthLocator(interval=fmt['xinterval']))
 
         # Apply Second Y-axis Formating
-        if y2data:
+        if y2data is not None:
             ax2.spines[['right']].set_visible(True)
             if fmt['y2lim']:
                 ax2.set_ylim(fmt['y2lim'])
@@ -413,7 +413,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         # Apply Legend
         if fmt['legend']=='on':
-            if y2data:
+            if y2data is not None:
                 h1, l1 = fig.axes[0].get_legend_handles_labels()
                 h2, l2 = fig.axes[1].get_legend_handles_labels()
                 ax.legend(h1+h2, l1+l2, bbox_to_anchor=(0.5, 1.0), loc=fmt['legend_loc'], ncol = fmt['legend_ncol'], frameon=False)
