@@ -291,7 +291,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 
         print('Pulling Monthly NIPA-PCE data.')
 
-        freq = M
+        freq = 'M'
 
         url_nipa = 'https://apps.bea.gov/national/Release/TXT/NipaData' + freq + '.txt'
         r = requests.get(url_nipa)
