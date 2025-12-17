@@ -229,7 +229,8 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 		'line_width': 2.0,
 		'colors': None,
 		'xlim': None,
-		'xinterval': None,
+		'xfreq': 'M',
+        'xinterval': None,
 		'save_path': None,
 		'dpi': 500,
         'y2label': '',
@@ -290,11 +291,11 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 if i==0: colors = None
                 if i==1: colors = style_colors[series_count:min(series_count + series2_count, len(style_colors))]
 
-            # For DataFrame inputs, plot each column and label according to 
+            # For DataFrame inputs, plot each column and label according to
             if isinstance(data, pd.DataFrame):
-            
+
                 for j, (col) in enumerate(data.columns):
-                    
+
                     plot_kwargs = {
                         'label': col,
                         'linestyle': line_styles[j] if j < len(line_styles) else '-',
@@ -302,59 +303,67 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     }
                     if colors and colors[j]:
                         plot_kwargs['color'] = colors[j % len(colors)]
-                    
+
+                    mask = data[col].notna()
                     if xdata is not None:
                         if isinstance(xdata, Dict):
-                            plotaxs.plot(xdata[label], data[col], **plot_kwargs)
+                            plotaxs.plot(xdata[label][mask], data[col][mask], **plot_kwargs)
                         else:
-                            plotaxs.plot(xdata, data[col], **plot_kwargs)
+                            plotaxs.plot(xdata[mask], data[col][mask], **plot_kwargs)
                     else:
-                        plotaxs.plot(data.index, data[col], **plot_kwargs)
+                        plotaxs.plot(data.index[mask], data[col][mask], **plot_kwargs)
 
             # For dictionary inputs, plot input with the label provided
             elif isinstance(data, dict):
 
                 for j, (label, y) in enumerate(data.items()):
-                
+
                     plot_kwargs = {
                         'label': label,
                         'linestyle': line_styles[j] if j < len(line_styles) else '-',
                         'linewidth': line_widths[j] if j < len(line_widths) else 2
                     }
-                    
+
                     if colors and colors[j]:
                         plot_kwargs['color'] = colors[j % len(colors)]
 
+                    if isinstance(y, pd.Series):
+                        mask = y.notna()
+                    else:
+                        mask = np.array([v is not None and not (isinstance(v, float) and np.isnan(v)) for v in y])
+
                     if xdata is not None:
                         if isinstance(xdata, Dict):
-                            plotaxs.plot(xdata[label], y, **plot_kwargs)
+                            plotaxs.plot(xdata[label][mask], y[mask] if isinstance(y, pd.Series) else np.array(y)[mask], **plot_kwargs)
                         else:
-                            plotaxs.plot(xdata, y, **plot_kwargs)
+                            plotaxs.plot(xdata[mask] if hasattr(xdata, '__getitem__') else xdata, y[mask] if isinstance(y, pd.Series) else np.array(y)[mask], **plot_kwargs)
                     else:
                         if isinstance(y, pd.Series):
-                            plotaxs.plot(y.index, y, **plot_kwargs)
+                            plotaxs.plot(y.index[mask], y[mask], **plot_kwargs)
                         else:
                             raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
 
             # For a single data series input, plot data labeled with the data series column
             elif isinstance(data, pd.Series):
 
-                plot_kwargs = {'label': data.name, 'linestyle': line_styles[0], 'linewidth': line_widths[0]}            
-                
+                plot_kwargs = {'label': data.name, 'linestyle': line_styles[0], 'linewidth': line_widths[0]}
+
                 if colors and colors[0]: plot_kwargs['color'] = colors[0]
+                mask = data.notna()
                 if xdata is not None:
-                    plotaxs.plot(xdata, data, **plot_kwargs)
+                    plotaxs.plot(xdata[mask], data[mask], **plot_kwargs)
                 else:
-                    plotaxs.plot(data.index, data, **plot_kwargs)
+                    plotaxs.plot(data.index[mask], data[mask], **plot_kwargs)
 
             # Otherwise, plot the data
             else:
-                
-                plot_kwargs = {'linestyle': line_styles[0], 'linewidth': line_widths[0]}     
+
+                plot_kwargs = {'linestyle': line_styles[0], 'linewidth': line_widths[0]}
 
                 if colors and colors[0]: plot_kwargs['color'] = colors[0]
                 if xdata is not None:
-                    plotaxs.plot(xdata, ydata, **plot_kwargs)
+                    mask = np.array([v is not None and not (isinstance(v, float) and np.isnan(v)) for v in data])
+                    plotaxs.plot(xdata[mask] if hasattr(xdata, '__getitem__') else xdata, np.array(data)[mask], **plot_kwargs)
                 else:
                     raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
         
@@ -392,10 +401,17 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             ax.axhline(y=fmt['xaxiscross'], color='black', linewidth=0.8)
             ax.spines['bottom'].set_position(('outward', 0))
 
-        # Will need to generalize this to quarters and years
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%Y'))
-        if fmt['xinterval']:
-        	ax.xaxis.set_major_locator(mdates.MonthLocator(interval=fmt['xinterval']))
+        # Format x-axis based on data frequency
+        if fmt['xfreq'] == 'Y':
+            # Annual data format
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+            if fmt['xinterval']:
+                ax.xaxis.set_major_locator(mdates.YearLocator(fmt['xinterval']))
+        elif fmt['xfreq'] == 'M':
+            # Monthly data format
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%Y'))
+            if fmt['xinterval']:
+                ax.xaxis.set_major_locator(mdates.MonthLocator(interval=fmt['xinterval']))
 
         # Apply Second Y-axis Formating
         if y2data is not None:
