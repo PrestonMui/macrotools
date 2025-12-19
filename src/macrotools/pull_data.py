@@ -31,6 +31,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         'wp': PPI Commodity Data
         'ei': Import/Export Price Index
         'cx': Consumer Expenditures
+        'tu': Time Use Survey
         'nipa-pce': NIPA PCE Data
         'stclaims': State-level unemployment claims
 
@@ -57,6 +58,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         'wp',
         'ei',
         'cx', 
+        'tu',
         'stclaims',
         'nipa-pce',
         'ny-mfg',
@@ -87,6 +89,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             'wp': PPI Commodity
             'cx': Consumer Expenditures
             'ei': Import and Export Price Indices
+            'tu': Time Use Survey
             'nipa-pce': Monthly NIPA PCE Data
             'stclaims': State-level claims
             'ny-mfg': NYFed Empire Survey
@@ -115,7 +118,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
     print(f"Pulling data from source: {source}")
 
     # Format flatfile -- BLS Sources
-    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx']:
+    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu']:
 
         email = _get_email_for_bls(email)
 
@@ -128,7 +131,8 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             'pc': 'pc.data.0.Current',
             'wp': 'wp.data.0.Current',
             'ei': 'ei.data.0.Current',
-            'cx': 'cx.data.1.AllData'
+            'cx': 'cx.data.1.AllData',
+            'tu': 'tu.data.1.AllData'
         }
 
         base_url = 'https://download.bls.gov/pub/time.series/' + source + '/'
@@ -168,25 +172,26 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 
             if source in ['ci']:
                 data = data[['series_id','value','year','quarter']]
-                data['period'] = pd.PeriodIndex(data['year'].astype(str) + 'Q' + data['quarter'].astype(str), freq='Q')
+                data['period'] = pd.to_datetime(data['year'].astype(str) + '-' + (data['quarter'] * 3).astype(str) + '-01')
                 data = (data
                         .drop(['year','quarter'], axis=1)
                         .pivot_table(values = 'value', index = 'period', columns = 'series_id')
-                        .asfreq('Q'))
+                        .asfreq('QS-MAR'))
                 
-            if source in ['cx']:
+            if source in ['cx', 'tu']:
                 data = data[['series_id', 'value', 'year']]
-                data['period'] = pd.PeriodIndex(data['year'].astype(str), freq='Y-JAN')
+                data['date'] = pd.to_datetime(data['year'], format='%Y')
                 data = (data
+                        .set_index('date')
                         .drop('year', axis=1)
-                        .pivot_table(values = 'value', index = 'period', columns = 'series_id')
-                        .asfreq('Y'))
+                        .pivot_table(values = 'value', index = 'date', columns = 'series_id')
+                        .asfreq('YS'))
 
         # Attributes
         data.attrs['data description'] = ''
 
         # Series
-        if source in ['ln','ce', 'ci', 'cu','pc','wp','cx']:
+        if source in ['ln','ce', 'ci', 'cu','pc','wp','cx', 'tu']:
             r = requests.get(series_url, headers=headers)
             series = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
             series.columns = series.columns.str.strip()
@@ -482,7 +487,8 @@ def pull_bls_series(series_list: Union[str, List],
         'pc',
         'wp',
         'ei',
-        'cx'
+        'cx',
+        'tu'
     ]
 
     data_list = []
@@ -502,6 +508,7 @@ def pull_bls_series(series_list: Union[str, List],
             'wp': PPI Commodity
             'ei': Import and Export Price Indices
             'cx': Consumer Expenditures Survey
+            'tu': Time Use Survey
             """
         )
 
