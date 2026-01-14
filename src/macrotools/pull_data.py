@@ -541,19 +541,20 @@ def search_bls_series(source, input):
     Example:
     -----------
     import macrotools as mt
-    cedata = mt.pull_data('ce')
-    found_series = search_bls_series(cedata, ['Average Hourly Earnings', 'nonsupervisory', 'mining', 'seAsOnaLly aDjusTed'])
+    found_series = search_bls_series('ce', ['Average Hourly Earnings', 'nonsupervisory', 'mining', 'seAsOnaLly aDjusTed'])
     """
 
     if isinstance(input, str):
         string_list = [input]
     else:
         string_list = input
-    
+
+    series_list = pull_data(source, force_refresh=False).attrs['series']
+
     found_series = []
-    for (key, value) in source.attrs['series'].items():
+    for (key, value) in series_list.items():
         if all(string.casefold() in value.casefold() for string in string_list):
             found_series.append(key)
     
     print(f'Found {len(found_series)} series that match your search.')
-    return {k: source.attrs['series'][k] for k in found_series}
+    return {k: series_list[k] for k in found_series}
