@@ -218,7 +218,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 		'ytickformat': 'dec',
 		'xticksize': None,
 		'yticksize': None,
-		'ydecimals': 0,
+		'ydecimals': None,
 		'ylim': None,
         'xaxiscross': None,
 		'figsize': (9, 5),
@@ -291,6 +291,11 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 if i==0: colors = None
                 if i==1: colors = style_colors[series_count:min(series_count + series2_count, len(style_colors))]
 
+            # Obtain Graph limits -- convert to datetime if necessary
+            if fmt['xlim'] is not None:
+                xlim_min = pd.to_datetime(fmt['xlim'][0]) if isinstance(fmt['xlim'][0], str) else fmt['xlim'][0]
+                xlim_max = pd.to_datetime(fmt['xlim'][1]) if isinstance(fmt['xlim'][1], str) else fmt['xlim'][1]
+
             # For DataFrame inputs, plot each column and label according to
             if isinstance(data, pd.DataFrame):
 
@@ -304,14 +309,20 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     if colors and colors[j]:
                         plot_kwargs['color'] = colors[j % len(colors)]
 
+                    # Mask data -- missing and xlims
                     mask = data[col].notna()
                     if xdata is not None:
                         if isinstance(xdata, Dict):
-                            plotaxs.plot(xdata[label][mask], data[col][mask], **plot_kwargs)
+                            xdata_plot = xdata[col]
                         else:
-                            plotaxs.plot(xdata[mask], data[col][mask], **plot_kwargs)
+                            xdata_plot = xdata
                     else:
-                        plotaxs.plot(data.index[mask], data[col][mask], **plot_kwargs)
+                        xdata_plot = data.index
+                    if fmt['xlim'] is not None:
+                        mask = mask & (xdata_plot >= xlim_min) & (xdata_plot <= xlim_max)
+
+                    # Plot data
+                    plotaxs.plot(xdata_plot[mask], data[col][mask], **plot_kwargs)
 
             # For dictionary inputs, plot input with the label provided
             elif isinstance(data, dict):
@@ -327,10 +338,26 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     if colors and colors[j]:
                         plot_kwargs['color'] = colors[j % len(colors)]
 
+                    # Mask data -- missing and xlims
                     if isinstance(y, pd.Series):
                         mask = y.notna()
                     else:
                         mask = np.array([v is not None and not (isinstance(v, float) and np.isnan(v)) for v in y])
+
+                    if fmt['xlim'] is not None:
+                        if xdata is not None:
+                            if isinstance(xdata, Dict):
+                                xdata_to_mask = xdata[label]
+                            else:
+                                xdata_to_mask = xdata
+                        else:
+                            if isinstance(y, pd.Series):
+                                xdata_to_mask = y.index
+                            else:
+                                xdata_to_mask = None
+
+                        if xdata_to_mask is not None:
+                            mask = mask & (xdata_to_mask >= xlim_min) & (xdata_to_mask <= xlim_max)
 
                     if xdata is not None:
                         if isinstance(xdata, Dict):
@@ -349,11 +376,17 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 plot_kwargs = {'label': data.name, 'linestyle': line_styles[0], 'linewidth': line_widths[0]}
 
                 if colors and colors[0]: plot_kwargs['color'] = colors[0]
+                
+                # Mask data
                 mask = data.notna()
                 if xdata is not None:
-                    plotaxs.plot(xdata[mask], data[mask], **plot_kwargs)
+                    xdata_plot = xdata
                 else:
-                    plotaxs.plot(data.index[mask], data[mask], **plot_kwargs)
+                    xdata_plot = data.index
+                if fmt['xlim'] is not None:
+                    mask = mask & (xdata_plot >= xlim_min) & (xdata_plot <= xlim_max)
+
+                plotaxs.plot(xdata_plot[mask], data[mask], **plot_kwargs)
 
             # Otherwise, plot the data
             else:
@@ -363,6 +396,8 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 if colors and colors[0]: plot_kwargs['color'] = colors[0]
                 if xdata is not None:
                     mask = np.array([v is not None and not (isinstance(v, float) and np.isnan(v)) for v in data])
+                    if fmt['xlim'] is not None:
+                        mask = mask & (xdata >= xlim_min) & (xdata <= xlim_max)
                     plotaxs.plot(xdata[mask] if hasattr(xdata, '__getitem__') else xdata, np.array(data)[mask], **plot_kwargs)
                 else:
                     raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
@@ -395,7 +430,10 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         if fmt['ytickformat']=='pctg':
             ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['ydecimals']))
         elif fmt['ytickformat']=='dec':
-            ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["ydecimals"]}f}}'))
+            if fmt['ydecimals'] is None:
+                ax.yaxis.set_major_formatter(mtick.ScalarFormatter())
+            else:
+                ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["ydecimals"]}f}}'))
 
         if fmt['xaxiscross'] is not None:
             ax.axhline(y=fmt['xaxiscross'], color='black', linewidth=0.8)
@@ -423,7 +461,10 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             if fmt['y2tickformat']=='pctg': 
                 ax2.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['y2decimals']))
             elif fmt['y2tickformat']=='dec':
-                ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
+                if fmt['y2decimals'] is None:
+                    ax.yaxis.set_major_formatter(mtick.ScalarFormatter())
+                else:
+                    ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["y2decimals"]}f}}'))
             if fmt['y2ticksize']:
                 ax2.set_yticks(np.arange(fmt['y2lim'][0], fmt['y2lim'][1] + fmt['y2ticksize'] / 10, fmt['y2ticksize']))
 
