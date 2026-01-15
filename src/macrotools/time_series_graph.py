@@ -271,18 +271,18 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             if i==0:
                 sfx = ''
                 plotaxs = ax
+                line_styles = [fmt['line_style']] * series_count if isinstance(fmt['line_style'], str) else fmt[f'line_style']
+                line_widths = [fmt[f'line_width']] * series_count if isinstance(fmt[f'line_width'], (int, float)) else fmt[f'line{sfx}_width']
             elif i==1:
                 sfx = '2'
                 plotaxs = ax2
-
-            # Create list of line styles, line widths
-            line_styles = [fmt[f'line{sfx}_style']] * series_count if isinstance(fmt[f'line{sfx}_style'], str) else fmt[f'line{sfx}_style']
-            line_widths = [fmt[f'line{sfx}_width']] * series_count if isinstance(fmt[f'line{sfx}_width'], (int, float)) else fmt[f'line{sfx}_width']
+                line_styles = [fmt['line2_style']] * series2_count if isinstance(fmt[f'line2_style'], str) else fmt[f'line2_style']
+                line_widths = [fmt[f'line2_width']] * series2_count if isinstance(fmt[f'line2_width'], (int, float)) else fmt[f'line2_width']
 
             # Create list of colors. If colors are not specified, use stylesheet colors
             if isinstance(fmt[f'colors{sfx}'], list):
                 colors = fmt[f'colors{sfx}']
-            elif isinstance(fmt['colors{sfx}'], str):
+            elif isinstance(fmt[f'colors{sfx}'], str):
                 colors = [fmt[f'colors{sfx}']] * series_count
             else:
                 if i==0: colors = None
@@ -293,7 +293,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 xlim_min = pd.to_datetime(fmt['xlim'][0]) if isinstance(fmt['xlim'][0], str) else fmt['xlim'][0]
                 xlim_max = pd.to_datetime(fmt['xlim'][1]) if isinstance(fmt['xlim'][1], str) else fmt['xlim'][1]
 
-            # For DataFrame inputs, plot each column and label according to
+            # For DataFrame inputs, plot each column and label; use index as xdata unless otherwise provided.
             if isinstance(data, pd.DataFrame):
 
                 for j, (col) in enumerate(data.columns):
@@ -303,7 +303,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                         'linestyle': line_styles[j] if j < len(line_styles) else '-',
                         'linewidth': line_widths[j] if j < len(line_widths) else 2
                     }
-                    if colors and colors[j]:
+                    if colors:
                         plot_kwargs['color'] = colors[j % len(colors)]
 
                     # Mask data -- missing and xlims
@@ -344,28 +344,21 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     if fmt['xlim'] is not None:
                         if xdata is not None:
                             if isinstance(xdata, Dict):
-                                xdata_to_mask = xdata[label]
+                                xdata_plot = xdata[label]
                             else:
-                                xdata_to_mask = xdata
+                                xdata_plot = xdata
                         else:
                             if isinstance(y, pd.Series):
-                                xdata_to_mask = y.index
+                                xdata_plot = y.index
                             else:
-                                xdata_to_mask = None
+                                raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
 
-                        if xdata_to_mask is not None:
-                            mask = mask & (xdata_to_mask >= xlim_min) & (xdata_to_mask <= xlim_max)
+                        if xdata_plot is not None:
+                            mask = mask & (xdata_plot >= xlim_min) & (xdata_plot <= xlim_max)
 
-                    if xdata is not None:
-                        if isinstance(xdata, Dict):
-                            plotaxs.plot(xdata[label][mask], y[mask] if isinstance(y, pd.Series) else np.array(y)[mask], **plot_kwargs)
-                        else:
-                            plotaxs.plot(xdata[mask] if hasattr(xdata, '__getitem__') else xdata, y[mask] if isinstance(y, pd.Series) else np.array(y)[mask], **plot_kwargs)
-                    else:
-                        if isinstance(y, pd.Series):
-                            plotaxs.plot(y.index[mask], y[mask], **plot_kwargs)
-                        else:
-                            raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
+                    ydata_plot = y if isinstance(y, pd.Series) else np.array(y)
+
+                    plotaxs.plot(xdata_plot[mask], ydata_plot[mask], **plot_kwargs)                           
 
             # For a single data series input, plot data labeled with the data series column
             elif isinstance(data, pd.Series):
