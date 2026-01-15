@@ -134,7 +134,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         save_file = master.FIGURES_DIR + 'paepop.png'
     )
 
-    Here is an exmaple for two series:
+    Here is an example for two series:
     mt.tsgraph(
         xdata = ln_clean.index,
         ydata = {'Men': ln_clean['LNS12300061']},
@@ -144,13 +144,11 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             'xlim': (master.GRAPH_START_DATE, master.GRAPH_END_DATE),
             'xinterval' : 6,
             'ylim': (0.83, 0.88), 'yticksize': 0.01, 'ylabel': 'Men', 'ytickformat': 'pctg', 'ydecimals': 0,        
-            'y2lim': (0.73, 0.78), 'y2ticksize': 0.01, 'y2label': 'Woen', 'y2tickformat': 'pctg', 'y2decimals': 0,
+            'y2lim': (0.73, 0.78), 'y2ticksize': 0.01, 'y2label': 'Women', 'y2tickformat': 'pctg', 'y2decimals': 0,
             'legend': 'on'
         },
         save_file = master.FIGURES_DIR + 'paepop_gender.png'
     )
-
-    ... Need to create example
     """
     
     ########################################
