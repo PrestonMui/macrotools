@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import font_manager
 import matplotlib.ticker as mtick
-import matplotlib.font_manager as fm
 
 import pandas as pd
 import datetime as dt
