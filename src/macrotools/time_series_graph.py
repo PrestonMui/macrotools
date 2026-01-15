@@ -204,32 +204,32 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
     # Formatting info
     default_format = {
-		'title': '',
-		'title_y': def_title_y,
+        'title': '',
+        'title_y': def_title_y,
         'title_size': 20,
-		'subtitle': '',
-		'subtitle_y': def_subtitle_y,
+        'subtitle': '',
+        'subtitle_y': def_subtitle_y,
         'subtitle_size': 14,
         'xlabel': '',
         'ylabel': '',
-		'ytickformat': 'dec',
-		'xticksize': None,
-		'yticksize': None,
-		'ydecimals': None,
-		'ylim': None,
+        'ytickformat': 'dec',
+        'xticksize': None,
+        'yticksize': None,
+        'ydecimals': None,
+        'ylim': None,
         'xaxiscross': None,
-		'figsize': (9, 5),
+        'figsize': (9, 5),
         'legend': 'off',
-		'legend_loc': 'lower center',
+        'legend_loc': 'lower center',
         'legend_ncol': min(4, total_series),
-		'line_style': '-',
-		'line_width': 2.0,
-		'colors': None,
-		'xlim': None,
-		'xfreq': 'M',
+        'line_style': '-',
+        'line_width': 2.0,
+        'colors': None,
+        'xlim': None,
+        'xfreq': 'M',
         'xinterval': None,
-		'save_path': None,
-		'dpi': 500,
+        'save_path': None,
+        'dpi': 500,
         'y2label': '',
         'y2tickformat': 'dec',
         'y2ticksize': None,
@@ -282,7 +282,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             # Create list of colors. If colors are not specified, use stylesheet colors
             if isinstance(fmt[f'colors{sfx}'], list):
                 colors = fmt[f'colors{sfx}']
-            elif isinstance(fmt['colors'], str):
+            elif isinstance(fmt['colors{sfx}'], str):
                 colors = [fmt[f'colors{sfx}']] * series_count
             else:
                 if i==0: colors = None
@@ -459,9 +459,9 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 ax2.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['y2decimals']))
             elif fmt['y2tickformat']=='dec':
                 if fmt['y2decimals'] is None:
-                    ax.yaxis.set_major_formatter(mtick.ScalarFormatter())
+                    ax2.yaxis.set_major_formatter(mtick.ScalarFormatter())
                 else:
-                    ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["y2decimals"]}f}}'))
+                    ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["y2decimals"]}f}}'))
             if fmt['y2ticksize']:
                 ax2.set_yticks(np.arange(fmt['y2lim'][0], fmt['y2lim'][1] + fmt['y2ticksize'] / 10, fmt['y2ticksize']))
 
