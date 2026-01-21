@@ -34,6 +34,17 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         'tu': Time Use Survey
         'nipa-pce': NIPA PCE Data
         'stclaims': State-level unemployment claims
+        'ny-mfg': NYFed Empire Manufacturing Survey
+        'ny-svc': NYFed Services Survey
+        'philly-mfg': Philadelphia Fed Manufacturing Survey
+        'philly-nonmfg': Philadelphia Fed Nonmanufacturing Survey
+        'richmond-mfg': Richmond Fed Manufacturing Survey
+        'richmond-nonmfg': Richmond Fed Nonmanufacturing Survey
+        'dallas-mfg': Dallas Fed Manufacturing Survey
+        'dallas-svc': Dallas Fed Services Survey
+        'dallas-retail': Dallas Fed Retail Survey
+        'kc-mfg': Kansas City Fed Manufacturing Survey
+        'kc-svc': Kansas City Fed Services Survey
 
     email : str
         Provide an email address to pull files from the BLS.
@@ -102,7 +113,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             'dallas-svc': Dallas Fed Services Survey
             'dallas-retail': Dallas Fed Retail Survey
             'kc-mfg': Kansas City Fed Mfg Survey
-            'kc-svc': Dallas Fed Services Survey
+            'kc-svc': Kansas City Fed Services Survey
             """
         )
 
