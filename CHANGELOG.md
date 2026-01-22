@@ -2,6 +2,10 @@
 
 ## Version 0
 
+### Version 0.1.4
+- Added time use survey ('tu') to pull_data
+- Various bug fixes and improvements
+
 ### Version 0.1.3
 - Added Consumer Expenditures ('cx') to pull_data and pull_bls_series.
 - Removed `freq` as option for pull_data.

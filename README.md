@@ -26,5 +26,3 @@ Currently stored at [GitHub](https://github.com/PrestonMui/macrotools.git).
 Some features I am working on.
 
 [] Wrapper for FRED API -- allow for pulling multiple series
-
-[] Some way to search through BLS series to figure out which series_id you'd like to call
