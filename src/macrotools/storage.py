@@ -226,3 +226,74 @@ def _get_email_for_bls(email: Optional[str] = None) -> str:
             store_email(email)
 
     return email
+
+
+def store_fred_api_key(api_key: str) -> None:
+    """
+    Store a FRED API key for data pulls.
+
+    Parameters:
+    -----------
+    api_key : str
+        FRED API key to store
+    """
+    credentials = _load_credentials()
+    credentials['fred_api_key'] = api_key
+    _save_credentials(credentials)
+    print("FRED API key stored successfully")
+
+
+def get_stored_fred_api_key() -> Optional[str]:
+    """
+    Get the stored FRED API key.
+
+    Returns:
+    --------
+    str or None
+        The stored API key, or None if not set
+    """
+    credentials = _load_credentials()
+    return credentials.get('fred_api_key')
+
+
+def _get_fred_api_key(api_key: Optional[str] = None) -> str:
+    """
+    Get FRED API key to use for requests.
+
+    Priority:
+    1. If api_key is provided as argument, use it
+    2. If api_key is stored, use stored api_key
+    3. Check environment variable FRED_API_KEY
+    4. Otherwise, prompt user for api_key
+
+    Parameters:
+    -----------
+    api_key : str, optional
+        API key provided by user
+
+    Returns:
+    --------
+    str
+        API key to use
+    """
+    if api_key:
+        return api_key
+
+    stored_key = get_stored_fred_api_key()
+    if stored_key:
+        return stored_key
+
+    # Check environment variable
+    env_key = os.getenv('FRED_API_KEY')
+    if env_key:
+        return env_key
+
+    # Prompt user for API key
+    print("FRED API key is required. Get one free at: https://fred.stlouisfed.org/docs/api/api_key.html")
+    api_key = input("Please enter your FRED API key: ").strip()
+    if api_key:
+        store_choice = input("Would you like to store this API key for future use? (y/n): ").strip().lower()
+        if store_choice == 'y':
+            store_fred_api_key(api_key)
+
+    return api_key

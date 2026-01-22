@@ -10,6 +10,7 @@ from .storage import (
     _load_cached_data,
     _save_cached_data,
     _get_email_for_bls,
+    _get_fred_api_key,
 )
 
 @timer
@@ -569,3 +570,182 @@ def search_bls_series(source, input):
     
     print(f'Found {len(found_series)} series that match your search.')
     return {k: series_list[k] for k in found_series}
+
+@timer
+def alfred_as_reported(
+    fred_series: str,
+    function: Optional[callable] = None,
+    release_start_date: Optional[str] = None,
+    release_end_date: Optional[str] = None,
+    api_key: Optional[str] = None
+) -> pd.DataFrame:
+    """
+    Pull as-reported data from ALFRED (Archival FRED).
+
+    Returns a DataFrame indexed by vintage dates, where each row contains
+    the last observed data point available at that vintage date and the
+    date of that observation. This captures how data evolved over time as
+    revisions were released.
+
+    Parameters:
+    -----------
+    fred_series : str
+        FRED series ID (e.g., 'GDP', 'UNRATE', 'CPIAUCSL')
+
+    function : callable, optional
+        Transformation function to apply to the data before taking the last value.
+        Examples: np.log, lambda x: x * 100, or custom functions
+        The function is applied to the entire vintage series, then the last value is taken.
+
+    release_start_date : str, optional
+        Filter vintage dates >= this date. Format: 'YYYY-MM-DD' or any pandas-parseable date.
+
+    release_end_date : str, optional
+        Filter vintage dates <= this date. Format: 'YYYY-MM-DD' or any pandas-parseable date.
+
+    api_key : str, optional
+        FRED API key. If not provided, will check stored credentials, environment
+        variable FRED_API_KEY, or prompt user.
+
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame indexed by vintage dates (DateTimeIndex), with two columns:
+        - 'value': Last observed data point at each vintage date
+        - 'last_date': The observation date of that last value
+
+    Attributes:
+    -----------
+    The returned DataFrame has the following attributes:
+    - attrs['series_id']: FRED series ID
+    - attrs['source']: 'ALFRED'
+    - attrs['function']: String representation of transformation function applied
+    - attrs['release_date_range']: Tuple of (start, end) release dates if filtered
+    - attrs['date_created']: Timestamp when data was pulled
+
+    Notes:
+    ------
+    - Requires fredapi package: `pip install fredapi` or `pip install macrotools[fred]`
+    - Get a free FRED API key at: https://fred.stlouisfed.org/docs/api/api_key.html
+    - Uses a single API call to `get_series_all_releases` for performance (not repeated calls per vintage)
+
+    Examples:
+    ---------
+    # Basic usage - get GDP as reported
+    gdp_as_reported = alfred_as_reported('GDP')
+
+    # Get unemployment rate with date filtering
+    unrate = alfred_as_reported('UNRATE',
+                                release_start_date='2020-01-01',
+                                release_end_date='2023-12-31')
+
+    # Apply log transformation before taking last value
+    import numpy as np
+    gdp_log = alfred_as_reported('GDP', function=np.log)
+    """
+
+    # Check for fredapi dependency
+    try:
+        from fredapi import Fred
+    except ImportError:
+        raise ImportError(
+            "fredapi package is required for alfred_as_reported(). "
+            "Install with: pip install fredapi or pip install macrotools[fred]"
+        )
+
+    # Get API key
+    api_key = _get_fred_api_key(api_key)
+
+    # Initialize Fred client
+    fred = Fred(api_key=api_key)
+
+    # Get all releases for the series
+    try:
+        all_releases = fred.get_series_all_releases(fred_series)
+    except Exception as e:
+        raise ValueError(
+            f"Error retrieving releases for series '{fred_series}': {e}\n"
+            "Check that the series ID is valid and your API key is correct."
+        )
+
+    # Rename columns to be clearer
+    all_releases = all_releases.rename(columns={'realtime_start': 'vintage_date', 'date': 'obs_date'})
+
+    # Convert to datetime for filtering
+    all_releases['vintage_date'] = pd.to_datetime(all_releases['vintage_date'])
+    all_releases['obs_date'] = pd.to_datetime(all_releases['obs_date'])
+
+    # List of all Vintage Dates
+    all_vintage_dates = all_releases['vintage_date'].sort_values().unique()
+
+    # Filter vintage dates by release_start_date and release_end_date
+    vintage_dates = all_vintage_dates
+    if release_start_date:
+        release_start = pd.to_datetime(release_start_date)
+        vintage_dates = [d for d in vintage_dates if d >= release_start]
+    if release_end_date:
+        release_end = pd.to_datetime(release_end_date)
+        vintage_dates = [d for d in vintage_dates if d <= release_end]
+
+    if len(vintage_dates) == 0:
+        raise ValueError(
+            f"No vintage dates found for series '{fred_series}' "
+            f"in the specified release date range."
+        )
+
+    print(f"Processing {len(vintage_dates)} vintage dates...")
+
+    # Process each vintage date
+    results = []
+    for vintage_date in vintage_dates:
+        try:
+            # Filter to releases published by this vintage date
+            available_releases = all_releases[all_releases['vintage_date'] <= vintage_date].copy()
+
+            if len(available_releases) == 0:
+                continue
+
+            # For each observation date, keep only the most recent vintage
+            # This reconstructs the full series as it appeared at this vintage date
+            vintage_series = (available_releases
+                             .sort_values('vintage_date')
+                             .groupby('obs_date', as_index=False)
+                             .last())
+
+            if len(vintage_series) == 0:
+                continue
+
+            # Apply transformation function if provided
+            if function:
+                vintage_series['value'] = function(vintage_series['value'])
+
+            # Get the most recent observation (maximum obs_date)
+            last_row = vintage_series.loc[vintage_series['obs_date'].idxmax()]
+
+            results.append({
+                'vintage_date': vintage_date,
+                'value': last_row['value'],
+                'last_date': last_row['obs_date']
+            })
+
+        except Exception as e:
+            # Log warning but continue processing other vintages
+            print(f"Warning: Could not process vintage date {vintage_date}: {e}")
+            continue
+
+    # Convert to DataFrame
+    if len(results) == 0:
+        raise ValueError(f"No data retrieved for series '{fred_series}' with the specified parameters.")
+
+    result_df = pd.DataFrame(results)
+    output = result_df.set_index('vintage_date')
+    output.index.name = 'vintage_date'
+
+    # Add metadata
+    output.attrs['series_id'] = fred_series
+    output.attrs['source'] = 'ALFRED'
+    output.attrs['function'] = function.__name__ if function else None
+    output.attrs['release_date_range'] = (release_start_date, release_end_date)
+    output.attrs['date_created'] = pd.Timestamp.now()
+
+    return output
