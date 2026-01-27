@@ -397,7 +397,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
     
     if source=='richmond-nonmfg':
 
-        url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/services/data/nmf_historicaldata.xlsx'
+        url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/non-manufacturing/data/nmf_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
         if cache: _save_cached_data(data, source, pivot)
