@@ -3,6 +3,9 @@
 ## Version 0
 
 ### Version 0.1.5
+- Fixed url on Richmond Nonmfg survey
+
+### Version 0.1.5
 - Added function to generate as-reported series. See help(macrotools.alfred_as_reported) for more.
 
 ### Version 0.1.4
