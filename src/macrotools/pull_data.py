@@ -349,6 +349,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         r = requests.get(url)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
+        data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
         data.set_index('date', inplace=True)
 
         if cache: _save_cached_data(data, source, pivot)
@@ -360,6 +361,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         r = requests.get(url)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
+        data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
         data.set_index('date', inplace=True)
 
         if cache: _save_cached_data(data, source, pivot)
@@ -407,8 +409,11 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tmos/documents/index_sa.xls'
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
-        data.drop(columns='Date', axis=1, inplace=True)
-        data.set_index('date', inplace=True)
+        data = (data
+                .drop(columns='Date', axis=1)
+                .dropna(subset=['date'])
+                .set_index('date')
+        )
         if cache: _save_cached_data(data, source, pivot)
         return data
 
@@ -424,8 +429,11 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tros_index_sa.xls'
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
-        data.drop(columns='Date', axis=1, inplace=True)
-        data.set_index('date', inplace=True)
+        data = (data
+            .dropna(subset=['date'])
+            .drop(columns='Date', axis=1)
+            .set_index('date')
+        )
         if cache: _save_cached_data(data, source, pivot)
         return data
     
