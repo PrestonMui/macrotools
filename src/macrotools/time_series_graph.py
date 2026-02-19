@@ -92,6 +92,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         Figure options:
         - 'figsize': tuple - Figure size (width, height)
+        - 'bgcolor': str - Background color for figure and axes (e.g. 'white', '#FFFFFF'). Defaults to style color.
 
         Plot Style options:
         - 'line_style': str or list - Line style(s) ('-', '--', '-.', ':')
@@ -237,7 +238,8 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'y2lim': None,
         'colors2': None,
         'line2_style': '-',
-        'line2_width': 2.0
+        'line2_width': 2.0,
+        'bgcolor': None
     }
     
     # Merge user format_info with defaults
@@ -253,6 +255,9 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         # Figure and Axes
         ########################################
         fig, ax = plt.subplots(figsize=fmt['figsize'])
+        if fmt['bgcolor'] is not None:
+            fig.set_facecolor(fmt['bgcolor'])
+            ax.set_facecolor(fmt['bgcolor'])
         if y2data is not None:
             ax2 = fig.axes[0].twinx()
 
