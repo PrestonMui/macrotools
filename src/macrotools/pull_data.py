@@ -650,6 +650,12 @@ def alfred_as_reported(
     # Apply log transformation before taking last value
     import numpy as np
     gdp_log = alfred_as_reported('GDP', function=np.log)
+
+    # Apply user-defined function before taking last value
+    # quarterly_3ma_growth(data) takes the mean, the 3-month change, and annualizes it:
+    def quarterly_3ma_growth(data):
+        return (1 + data.rolling(window=3).mean().pct_change(periods=3))**4  - 1
+    as_reported_payems = alfred_as_reported(fred_series='PAYEMS', function = quarterly_3ma_growth)
     """
 
     # Check for fredapi dependency
