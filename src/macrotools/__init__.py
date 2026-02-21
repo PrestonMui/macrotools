@@ -43,6 +43,6 @@ from .storage import (
 __all__ = ['tsgraph', 'eacolors', 'pull_data', 'pull_bls_series', 'search_bls_series', 'alfred_as_reported', 'clear_macrodata_cache', 'store_email', 'get_stored_email', 'store_fred_api_key', 'get_stored_fred_api_key']
 
 # Package metadata
-__version__ = '0.1.0'
+__version__ = '0.1.7'
 __author__ = 'Preston Mui'
 __email__ = 'preston@employamerica.org'
