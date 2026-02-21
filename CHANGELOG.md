@@ -2,6 +2,9 @@
 
 ## Version 0
 
+### Version 0.1.7
+- Added 'bgcolor' as format_info entry to change background color of tsgraph()
+
 ### Version 0.1.5
 - Fixed url on Richmond Nonmfg survey
 
