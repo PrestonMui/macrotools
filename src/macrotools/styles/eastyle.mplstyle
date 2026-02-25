@@ -34,7 +34,7 @@ ytick.labelcolor: "#1D1D1D"
 xtick.color: "#C8C8C8"
 ytick.color: "#C8C8C8"
 
-axes.prop_cycle: cycler('color', ['29679B', '008A6A', '2E2A73', '40B2FF', '64748B'])
+axes.prop_cycle: cycler('color', ['29679B', '008A6A', '2E2A73', '40B2FF', '64748B', '7A3B4E', '8C7E74'])
 
 patch.linewidth: 2.0
 patch.edgecolor: black

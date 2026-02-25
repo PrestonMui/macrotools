@@ -52,6 +52,8 @@ eacolors = _EAColors({
     'dark_purple': style_colors[2],    # #2E2A73
     'bright_blue': style_colors[3],    # #40B2FF
     'slate': style_colors[4],          # #64748B
+    'burgundy': style_colors[5],      # #7A3B4E
+    'warm_gray': style_colors[6],     # #8C7E74
     # Legacy aliases
     'eablue': style_colors[0],
     'eagreen': style_colors[1],
