@@ -190,7 +190,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
     fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
     fontfile_bold = Path(__file__).parent / 'styles' / 'fonts' / 'Lato-Bold.ttf'
     fontprop = font_manager.FontProperties(fname=str(fontfile))
-    fontprop_bold = font_manager.FontProperties(fname=str(fontfile_bold))
+    fontprop_bold = font_manager.FontProperties(fname=str(fontfile_bold), size=plt.rcParams['axes.labelsize'])
     style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
     ########################################
@@ -253,18 +253,17 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'ydecimals': None,
         'ylim': None,
         'xaxiscross': None,
-        'figsize': (9, 5),
+        'figsize': None,
         'legend': 'off',
         'legend_loc': 'lower center',
         'legend_ncol': min(4, total_series),
         'line_style': '-',
-        'line_width': 2.0,
+        'line_width': plt.rcParams['lines.linewidth'],
         'colors': None,
         'xlim': None,
         'xfreq': 'M',
         'xinterval': None,
         'save_path': None,
-        'dpi': 500,
         'y2label': '',
         'y2tickformat': 'dec',
         'y2ticksize': None,
@@ -272,7 +271,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'y2lim': None,
         'colors2': None,
         'line2_style': '-',
-        'line2_width': 2.0,
+        'line2_width': plt.rcParams['lines.linewidth'],
         'bgcolor': None
     }
     
@@ -288,7 +287,10 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         ########################################    
         # Figure and Axes
         ########################################
-        fig, ax = plt.subplots(figsize=fmt['figsize'])
+        subplots_kwargs = {}
+        if fmt['figsize'] is not None:
+            subplots_kwargs['figsize'] = fmt['figsize']
+        fig, ax = plt.subplots(**subplots_kwargs)
         if fmt['bgcolor'] is not None:
             fig.set_facecolor(fmt['bgcolor'])
             ax.set_facecolor(fmt['bgcolor'])
@@ -299,7 +301,6 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         ########################################
         # Per-axis grid styling
         ########################################
-        ax.yaxis.grid(True, color='#C8C8C8', linewidth=0.4, alpha=1.0)
         ax.xaxis.grid(True, color='#D4D4D4', linewidth=0.25, alpha=1.0)
 
         ########################################
@@ -530,12 +531,12 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             if y2data is not None:
                 h1, l1 = fig.axes[0].get_legend_handles_labels()
                 h2, l2 = fig.axes[1].get_legend_handles_labels()
-                ax.legend(h1+h2, l1+l2, bbox_to_anchor=(0.5, 1.0), loc=fmt['legend_loc'], ncol = fmt['legend_ncol'], frameon=False)
+                ax.legend(h1+h2, l1+l2, bbox_to_anchor=(0.5, 1.0), loc=fmt['legend_loc'], ncol = fmt['legend_ncol'])
             else:
-                ax.legend(bbox_to_anchor=(0.5, 1.0), loc=fmt['legend_loc'], ncol = fmt['legend_ncol'], frameon=False)
+                ax.legend(bbox_to_anchor=(0.5, 1.0), loc=fmt['legend_loc'], ncol = fmt['legend_ncol'])
         
         # Save Figure
         if save_file:
-            plt.savefig(save_file, bbox_inches='tight', edgecolor = fig.get_edgecolor(), dpi=500)
+            plt.savefig(save_file, bbox_inches='tight', edgecolor = fig.get_edgecolor())
 
         return fig

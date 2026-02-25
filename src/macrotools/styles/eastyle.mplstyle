@@ -7,7 +7,7 @@ figure.figsize: 9.0, 5.0
 figure.facecolor: "#F9F7F5"
 
 figure.titlesize: 22
-axes.labelsize : 14
+axes.labelsize : 12
 
 axes.xmargin: 0
 axes.ymargin: 0
@@ -42,3 +42,7 @@ patch.force_edgecolor: True
 axes.facecolor: "#F9F7F5"
 
 axes.autolimit_mode: round_numbers
+
+legend.frameon: False
+
+savefig.dpi: 500
