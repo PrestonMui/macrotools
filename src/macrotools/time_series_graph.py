@@ -141,7 +141,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         Colors:
         macrotools comes with the default EA color palette. You can call them via the color cycler (e.g. 'C2') or reference them by name:
-        macrotools.eacolors['colorname'], where 'colorname' is one of 'steel_blue', 'green', 'dark_purple', 'bright_blue', 'slate'
+        macrotools.eacolors['colorname'], where 'colorname' is one of 'steel_blue', 'green', 'dark_purple', 'bright_blue', 'slate', 'burgundy', 'warm_gray'
         For alert/emphasis colors: macrotools.ea_alert_colors['colorname'], where 'colorname' is one of 'alert_orange', 'alert_magenta', 'alert_violet', 'alert_yellow'
 
     save_file: str - Optional
@@ -188,28 +188,19 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
     ########################################
     # Call stylesheet and font
     ########################################
-    stylefile = Path(__file__).parent / 'styles' / 'eastyle.mplstyle'
     fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
     fontfile_bold = Path(__file__).parent / 'styles' / 'fonts' / 'Lato-Bold.ttf'
     fontprop = font_manager.FontProperties(fname=str(fontfile))
     fontprop_bold = font_manager.FontProperties(fname=str(fontfile_bold), size=plt.rcParams['axes.labelsize'])
-    style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
     ########################################
     # Default format options
     ########################################
 
     # Title Positions
-    if format_info:
-        if 'legend' in format_info and 'subtitle' in format_info:
-            def_title_y = 1.2
-            def_subtitle_y = 1.12
-        elif 'legend' in format_info and 'subtitle' not in format_info:
-            def_title_y = 1.1
-            def_subtitle_y = 1.03
-        else:
-            def_title_y = 1.1
-            def_subtitle_y = 1.03
+    if format_info and 'legend' in format_info and 'subtitle' in format_info:
+        def_title_y = 1.2
+        def_subtitle_y = 1.12
     else:
         def_title_y = 1.1
         def_subtitle_y = 1.03
@@ -222,6 +213,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
     else:
         series_count = 1
     
+    series2_count = 0
     if y2data is not None:
         if isinstance(y2data, dict):
             series2_count = len(y2data)
@@ -230,13 +222,13 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         else:
             series2_count = 1
 
-    total_series = series_count + series2_count if y2data is not None else series_count
+    total_series = series_count + series2_count
 
     # xdata - check that the number of xdata inputs is correct
     if xdata is not None:
-        if isinstance(xdata, Dict) and len(xdata)!=total_series:
+        if isinstance(xdata, dict) and len(xdata)!=total_series:
             raise Exception('Number of xdata series does not match number of y and y2data series')
-        if isinstance(xdata, Dict) and y2data:
+        if isinstance(xdata, dict) and y2data:
             if ydata.keys() & y2data.keys(): raise Exception('You have overlapping series keys in ydata and y2data. Please use unique keys.')
 
     # Formatting info
@@ -332,7 +324,8 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             if isinstance(fmt[f'colors{sfx}'], list):
                 colors = fmt[f'colors{sfx}']
             elif isinstance(fmt[f'colors{sfx}'], str):
-                colors = [fmt[f'colors{sfx}']] * series_count
+                current_count = series_count if i == 0 else series2_count
+                colors = [fmt[f'colors{sfx}']] * current_count
             else:
                 if i==0: colors = None
                 if i==1: colors = style_colors[series_count:min(series_count + series2_count, len(style_colors))]
@@ -358,7 +351,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     # Mask data -- missing and xlims
                     mask = data[col].notna()
                     if xdata is not None:
-                        if isinstance(xdata, Dict):
+                        if isinstance(xdata, dict):
                             xdata_plot = xdata[col]
                         else:
                             xdata_plot = xdata
@@ -392,7 +385,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
                     if fmt['xlim'] is not None:
                         if xdata is not None:
-                            if isinstance(xdata, Dict):
+                            if isinstance(xdata, dict):
                                 xdata_plot = xdata[label]
                             else:
                                 xdata_plot = xdata
@@ -446,15 +439,11 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         ########################################
 
         # Apply Title Formatting
+        ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
+                fontweight='bold', fontproperties=fontprop_bold,
+                transform=ax.transAxes, ha='left')
         if fmt['subtitle']:
-            ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
-                    fontweight='bold', fontproperties=fontprop_bold,
-                    transform=ax.transAxes, ha='left')
             ax.text(0.0, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'],
-                    transform=ax.transAxes, ha='left')
-        else:
-            ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
-                    fontweight='bold', fontproperties=fontprop_bold,
                     transform=ax.transAxes, ha='left')
 
         # Apply axis formating
