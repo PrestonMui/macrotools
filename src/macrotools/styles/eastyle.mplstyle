@@ -7,7 +7,7 @@ figure.figsize: 9.0, 5.0
 figure.facecolor: "#F9F7F5"
 
 figure.titlesize: 22
-axes.labelsize : 12
+axes.labelsize : 14
 
 axes.xmargin: 0
 axes.ymargin: 0
@@ -16,12 +16,25 @@ axes.grid.axis: both
 axes.spines.top: False
 axes.spines.right: False
 
+axes.linewidth: 1.0
+axes.edgecolor: "#C8C8C8"
+
 ytick.major.size: 0
-grid.linewidth: 0.25
 ytick.left: False
 ytick.right: False
 
-axes.prop_cycle: cycler('color', ['40B2FF', 'FF591F','008A6A','2E2A73','EAC14B','B20066','8A2B9C'])
+grid.linewidth: 0.4
+grid.color: "#C8C8C8"
+grid.alpha: 1.0
+
+xtick.labelsize: 11
+ytick.labelsize: 11
+xtick.labelcolor: "#1D1D1D"
+ytick.labelcolor: "#1D1D1D"
+xtick.color: "#C8C8C8"
+ytick.color: "#C8C8C8"
+
+axes.prop_cycle: cycler('color', ['29679B', '008A6A', '2E2A73', '40B2FF', '64748B'])
 
 patch.linewidth: 2.0
 patch.edgecolor: black

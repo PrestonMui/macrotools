@@ -1,5 +1,6 @@
 from typing import Union, List, Dict, Optional
 import numpy as np
+import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -8,7 +9,6 @@ import matplotlib.ticker as mtick
 
 import pandas as pd
 import datetime as dt
-import warnings
 from dateutil.relativedelta import relativedelta
 from PIL import Image
 from pathlib import Path
@@ -24,15 +24,46 @@ plt.style.use(str(stylefile))
 # Extract and store colors from stylesheet
 style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
-# Also create named dictionary if helpful
-eacolors = {
+# Named color dictionary with deprecation support for legacy keys
+class _EAColors(dict):
+    """Color dict with deprecation warnings for legacy keys."""
+    _deprecated = {
+        'eaorange': ('alert_orange', '#FF591F'),
+        'eayellow': ('alert_yellow', '#EAC14B'),
+        'eamagenta': ('alert_magenta', '#B20066'),
+        'eaviolet': ('alert_violet', '#8A2B9C'),
+    }
+    def __getitem__(self, key):
+        if key in self._deprecated:
+            new_name, color = self._deprecated[key]
+            warnings.warn(
+                f"eacolors['{key}'] is deprecated. "
+                f"Use ea_alert_colors['{new_name}'] instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            return color
+        return super().__getitem__(key)
+    def __contains__(self, key):
+        return key in self._deprecated or super().__contains__(key)
+
+eacolors = _EAColors({
+    'steel_blue': style_colors[0],    # #29679B
+    'green': style_colors[1],          # #008A6A
+    'dark_purple': style_colors[2],    # #2E2A73
+    'bright_blue': style_colors[3],    # #40B2FF
+    'slate': style_colors[4],          # #64748B
+    # Legacy aliases
     'eablue': style_colors[0],
-    'eaorange': style_colors[1],
-    'eagreen': style_colors[2],
-    'eapurple': style_colors[3],
-    'eayellow': style_colors[4],
-    'eamagenta': style_colors[5],
-    'eaviolet': style_colors[6]
+    'eagreen': style_colors[1],
+    'eapurple': style_colors[2],
+})
+
+# Alert palette — reserved for thresholds, shock markers, annotations
+ea_alert_colors = {
+    'alert_orange': '#FF591F',
+    'alert_magenta': '#B20066',
+    'alert_violet': '#8A2B9C',
+    'alert_yellow': '#EAC14B',
 }
 
 ########################################
@@ -108,7 +139,8 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         Colors:
         macrotools comes with the default EA color palette. You can call them via the color cycler (e.g. 'C2') or reference them by name:
-        macrotools.eacolors['colorname'], where 'colorname' is one of 'eablue', 'eaorange', 'eagreen', 'eapurple', 'eayellow', 'eamagenta', 'eaviolet'
+        macrotools.eacolors['colorname'], where 'colorname' is one of 'steel_blue', 'green', 'dark_purple', 'bright_blue', 'slate'
+        For alert/emphasis colors: macrotools.ea_alert_colors['colorname'], where 'colorname' is one of 'alert_orange', 'alert_magenta', 'alert_violet', 'alert_yellow'
 
     save_file: str - Optional
         If left out, will not save the graph
@@ -156,7 +188,9 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
     ########################################
     stylefile = Path(__file__).parent / 'styles' / 'eastyle.mplstyle'
     fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
+    fontfile_bold = Path(__file__).parent / 'styles' / 'fonts' / 'Lato-Bold.ttf'
     fontprop = font_manager.FontProperties(fname=str(fontfile))
+    fontprop_bold = font_manager.FontProperties(fname=str(fontfile_bold))
     style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
     ########################################
@@ -260,8 +294,15 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             ax.set_facecolor(fmt['bgcolor'])
         if y2data is not None:
             ax2 = fig.axes[0].twinx()
+            ax2.grid(False)
 
-        ########################################    
+        ########################################
+        # Per-axis grid styling
+        ########################################
+        ax.yaxis.grid(True, color='#C8C8C8', linewidth=0.4, alpha=1.0)
+        ax.xaxis.grid(True, color='#D4D4D4', linewidth=0.25, alpha=1.0)
+
+        ########################################
         # Create Plots
         ########################################
 
@@ -403,16 +444,29 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         # Apply Title Formatting
         if fmt['subtitle']:
-            ax.text(0.5, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'], transform=ax.transAxes, ha='center')
-            ax.text(0.5, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'], transform=ax.transAxes, ha='center')
+            ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
+                    fontweight='bold', fontproperties=fontprop_bold,
+                    transform=ax.transAxes, ha='left')
+            ax.text(0.0, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'],
+                    transform=ax.transAxes, ha='left')
         else:
-            ax.text(0.5, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'], transform=ax.transAxes, ha='center')
+            ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
+                    fontweight='bold', fontproperties=fontprop_bold,
+                    transform=ax.transAxes, ha='left')
 
         # Apply axis formating
         if fmt['xlabel']:
             ax.set_xlabel(fmt['xlabel'])
         if fmt['ylabel']:
-            ax.set_ylabel(fmt['ylabel'])
+            ylabel_kwargs = {}
+            if y2data is not None:
+                if isinstance(fmt['colors'], list):
+                    ylabel_kwargs['color'] = fmt['colors'][0]
+                elif isinstance(fmt['colors'], str):
+                    ylabel_kwargs['color'] = fmt['colors']
+                else:
+                    ylabel_kwargs['color'] = style_colors[0]
+            ax.set_ylabel(fmt['ylabel'], fontweight='bold', fontproperties=fontprop_bold, **ylabel_kwargs)
         if fmt['xlim']:
             if isinstance(fmt['xlim'][0], str) and isinstance(fmt['xlim'][1], str):
                 ax.set_xlim(pd.to_datetime(fmt['xlim'][0]), pd.to_datetime(fmt['xlim'][1]))
@@ -442,17 +496,25 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                 ax.xaxis.set_major_locator(mdates.YearLocator(fmt['xinterval']))
         elif fmt['xfreq'] == 'M':
             # Monthly data format
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%Y'))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
             if fmt['xinterval']:
                 ax.xaxis.set_major_locator(mdates.MonthLocator(interval=fmt['xinterval']))
 
         # Apply Second Y-axis Formating
         if y2data is not None:
             ax2.spines[['right']].set_visible(True)
+            ax2.spines['right'].set_linewidth(1.0)
+            ax2.spines['right'].set_color('#C8C8C8')
             if fmt['y2lim']:
                 ax2.set_ylim(fmt['y2lim'])
             if fmt['y2label']:
-                ax2.set_ylabel(fmt['y2label'])
+                if isinstance(fmt['colors2'], list):
+                    y2label_color = fmt['colors2'][0]
+                elif isinstance(fmt['colors2'], str):
+                    y2label_color = fmt['colors2']
+                else:
+                    y2label_color = style_colors[series_count] if series_count < len(style_colors) else style_colors[0]
+                ax2.set_ylabel(fmt['y2label'], fontweight='bold', fontproperties=fontprop_bold, color=y2label_color)
             if fmt['y2tickformat']=='pctg': 
                 ax2.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['y2decimals']))
             elif fmt['y2tickformat']=='dec':
