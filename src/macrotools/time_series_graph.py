@@ -163,6 +163,10 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         - 'legend': 'on' or 'off'
         - 'legend_ncol': int - number of columns for legend
 
+        Logo options:
+        - 'logo': str - Path to a logo image file (PNG recommended). Placed in the bottom-right corner.
+        - 'logo_scale': float - Height of logo as fraction of figure height (default: 0.06)
+
         Colors:
         macrotools comes with two built-in colorblind-friendly color palette:
         - Default: macrotools.default_colors['colorname'] (charcoal, steel, coral, dark_teal, amber, slate_purple, graphite)
@@ -320,7 +324,9 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'colors2': None,
         'line2_style': '-',
         'line2_width': plt.rcParams['lines.linewidth'],
-        'bgcolor': None
+        'bgcolor': None,
+        'logo': None,
+        'logo_scale': 0.06
     }
     
     # Merge user format_info with defaults
@@ -501,14 +507,29 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         # Apply Formatting
         ########################################
 
+        title_x = 0.0
+
+        # Apply Logo (bottom-right, below x-axis)
+        if fmt['logo'] is not None:
+            logo_img = Image.open(fmt['logo'])
+            logo_aspect = logo_img.width / logo_img.height
+            pos = ax.get_position()
+            logo_h = fmt['logo_scale']
+            logo_w = logo_h * logo_aspect * (fig.get_size_inches()[1] / fig.get_size_inches()[0])
+            logo_x = pos.x0 + pos.width - logo_w
+            logo_y = 0.0
+            logo_ax = fig.add_axes([logo_x, logo_y, logo_w, logo_h])
+            logo_ax.imshow(logo_img)
+            logo_ax.axis('off')
+
         # Apply Title Formatting
         title_kwargs = {'fontweight': 'bold'}
         if use_ea_fonts:
             title_kwargs['fontproperties'] = fontprop_bold
-        ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
+        ax.text(title_x, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
                 transform=ax.transAxes, ha='left', **title_kwargs)
         if fmt['subtitle']:
-            ax.text(0.0, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'],
+            ax.text(title_x, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'],
                     transform=ax.transAxes, ha='left')
 
         # Apply axis formating
