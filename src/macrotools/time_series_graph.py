@@ -14,17 +14,40 @@ from PIL import Image
 from pathlib import Path
 
 ########################################
+# STYLES
+########################################
+
+_styles_dir = Path(__file__).parent / 'styles'
+_default_stylefile = _styles_dir / 'defaultstyle.mplstyle'
+_ea_stylefile = _styles_dir / 'eastyle.mplstyle'
+
+# Apply default stylesheet at module level
+plt.style.use(str(_default_stylefile))
+
+########################################
 # COLORS
 ########################################
 
-# Apply stylesheet
-stylefile = Path(__file__).parent / 'styles' / 'eastyle.mplstyle'
-plt.style.use(str(stylefile))
+# Default color palette (colorblind-friendly, cool-leaning)
+default_colors = {
+    'charcoal':     '#3C3C3C',
+    'steel':        '#4A6FA5',
+    'coral':        '#D64545',
+    'dark_teal':    '#1B7C6F',
+    'amber':        '#D4860B',
+    'slate_purple': '#6E5E8B',
+    'graphite':     '#6B7D8A',
+}
 
-# Extract and store colors from stylesheet
-style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+# Default alert palette
+default_alert_colors = {
+    'alert_red':   '#E03131',
+    'alert_blue':  '#1C7ED6',
+    'alert_green': '#2F9E44',
+    'alert_gold':  '#F08C00',
+}
 
-# Named color dictionary with deprecation support for legacy keys
+# EA color palette
 class _EAColors(dict):
     """Color dict with deprecation warnings for legacy keys."""
     _deprecated = {
@@ -47,20 +70,20 @@ class _EAColors(dict):
         return key in self._deprecated or super().__contains__(key)
 
 eacolors = _EAColors({
-    'steel_blue': style_colors[0],    # #29679B
-    'green': style_colors[1],          # #008A6A
-    'dark_purple': style_colors[2],    # #2E2A73
-    'bright_blue': style_colors[3],    # #40B2FF
-    'slate': style_colors[4],          # #64748B
-    'burgundy': style_colors[5],      # #7A3B4E
-    'warm_gray': style_colors[6],     # #8C7E74
+    'steel_blue': '#29679B',
+    'green': '#008A6A',
+    'dark_purple': '#2E2A73',
+    'bright_blue': '#40B2FF',
+    'slate': '#64748B',
+    'burgundy': '#7A3B4E',
+    'warm_gray': '#8C7E74',
     # Legacy aliases
-    'eablue': style_colors[0],
-    'eagreen': style_colors[1],
-    'eapurple': style_colors[2],
+    'eablue': '#29679B',
+    'eagreen': '#008A6A',
+    'eapurple': '#2E2A73',
 })
 
-# Alert palette — reserved for thresholds, shock markers, annotations
+# EA alert palette — reserved for thresholds, shock markers, annotations
 ea_alert_colors = {
     'alert_orange': '#FF591F',
     'alert_magenta': '#B20066',
@@ -72,14 +95,15 @@ ea_alert_colors = {
 # GRAPHING FUNCTION
 ########################################
 
-def tsgraph(ydata: Union[List, np.ndarray, Dict], 
+def tsgraph(ydata: Union[List, np.ndarray, Dict],
             y2data: Optional[Union[List, np.ndarray, Dict]] = None,
-            xdata: Optional[Union[List, np.ndarray, Dict]] = None, 
+            xdata: Optional[Union[List, np.ndarray, Dict]] = None,
             format_info: Optional[Dict] = None,
+            style: Optional[Union[str, Dict]] = 'default',
             save_file: Optional[str] = None):
     """
-    Create a customizable graph with flexible formatting options in EA House Style.
-    
+    Create a customizable time series graph.
+
     Parameters:
     -----------
     ydata : array-like or dict, optional
@@ -95,9 +119,9 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         - Optional argument--if you pass a DataFrame or Series, will use th index.
     format_info: dict, optional
     save_file: str, optional
-            
+
         Dictionary containing formatting options:
-        
+
         Text options:
         - 'title': str - Graph title
         - 'subtitle': str - Graph subtitle
@@ -140,9 +164,17 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         - 'legend_ncol': int - number of columns for legend
 
         Colors:
-        macrotools comes with the default EA color palette. You can call them via the color cycler (e.g. 'C2') or reference them by name:
-        macrotools.eacolors['colorname'], where 'colorname' is one of 'steel_blue', 'green', 'dark_purple', 'bright_blue', 'slate', 'burgundy', 'warm_gray'
-        For alert/emphasis colors: macrotools.ea_alert_colors['colorname'], where 'colorname' is one of 'alert_orange', 'alert_magenta', 'alert_violet', 'alert_yellow'
+        macrotools comes with two built-in colorblind-friendly color palette:
+        - Default: macrotools.default_colors['colorname'] (charcoal, steel, coral, dark_teal, amber, slate_purple, graphite)
+        - EA: macrotools.eacolors['colorname'] (steel_blue, green, dark_purple, bright_blue, slate, burgundy, warm_gray)
+        Alert colors: macrotools.default_alert_colors or macrotools.ea_alert_colors
+    
+    style: str or dict, optional
+        Style to use for the graph. Options:
+        - 'default' (default): Clean, generic style with DejaVu Sans font
+        - 'ea': Employ America house style with Montserrat/Lato fonts
+        - Path to a .mplstyle file: Use a custom matplotlib stylesheet
+        - Dict of rcParams: Apply overrides on top of the default style
 
     save_file: str - Optional
         If left out, will not save the graph
@@ -152,7 +184,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
     Returns:
     --------
     fig: matplotlib figure
-    
+
     Examples:
     ---------
     Here is a minimalist example / template you can use for a single series:
@@ -168,7 +200,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         save_file = master.FIGURES_DIR + 'paepop.png'
     )
 
-    Here is an example for two series:
+    Here is an example using EA style:
     mt.tsgraph(
         xdata = ln_clean.index,
         ydata = {'Men': ln_clean['LNS12300061']},
@@ -177,21 +209,43 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             'title': 'Prime-age Employment Rate, by Gender', 'subtitle': 'Ratio, Employed to Population',
             'xlim': (master.GRAPH_START_DATE, master.GRAPH_END_DATE),
             'xinterval' : 6,
-            'ylim': (0.83, 0.88), 'yticksize': 0.01, 'ylabel': 'Men', 'ytickformat': 'pctg', 'ydecimals': 0,        
+            'ylim': (0.83, 0.88), 'yticksize': 0.01, 'ylabel': 'Men', 'ytickformat': 'pctg', 'ydecimals': 0,
             'y2lim': (0.73, 0.78), 'y2ticksize': 0.01, 'y2label': 'Women', 'y2tickformat': 'pctg', 'y2decimals': 0,
             'legend': 'on'
         },
+        style = 'ea',
         save_file = master.FIGURES_DIR + 'paepop_gender.png'
     )
     """
-    
+
     ########################################
-    # Call stylesheet and font
+    # Resolve style and fonts
     ########################################
-    fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
-    fontfile_bold = Path(__file__).parent / 'styles' / 'fonts' / 'Lato-Bold.ttf'
-    fontprop = font_manager.FontProperties(fname=str(fontfile))
-    fontprop_bold = font_manager.FontProperties(fname=str(fontfile_bold), size=plt.rcParams['axes.labelsize'])
+    use_ea_fonts = False
+
+    if isinstance(style, dict):
+        # Dict of rcParams overrides on top of default style
+        stylefile = str(_default_stylefile)
+        style_overrides = style
+    elif isinstance(style, str) and style.lower() == 'ea':
+        stylefile = str(_ea_stylefile)
+        style_overrides = None
+        use_ea_fonts = True
+        # Register EA fonts
+        fontfile = _styles_dir / 'fonts' / 'Montserrat-Regular.ttf'
+        fontfile_bold = _styles_dir / 'fonts' / 'Lato-Bold.ttf'
+        font_manager.fontManager.addfont(str(fontfile))
+        font_manager.fontManager.addfont(str(fontfile_bold))
+        fontprop = font_manager.FontProperties(fname=str(fontfile))
+        fontprop_bold = font_manager.FontProperties(fname=str(fontfile_bold), size=plt.rcParams['axes.labelsize'])
+    elif isinstance(style, str) and Path(style).is_file():
+        # Custom stylesheet path
+        stylefile = style
+        style_overrides = None
+    else:
+        # Default style
+        stylefile = str(_default_stylefile)
+        style_overrides = None
 
     ########################################
     # Default format options
@@ -274,9 +328,18 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         format_info = {}
     fmt = {**default_format, **format_info}
     
-    with plt.style.context(str(stylefile)):
+    # Build style context: stylesheet + optional rcParams overrides
+    style_context = [stylefile]
+    if style_overrides:
+        style_context.append(style_overrides)
 
-        plt.rcParams['font.family'] = fontprop.get_name()
+    with plt.style.context(style_context):
+
+        # Extract active color cycle for this style
+        style_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+        if use_ea_fonts:
+            plt.rcParams['font.family'] = fontprop.get_name()
 
         ########################################    
         # Figure and Axes
@@ -439,9 +502,11 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         ########################################
 
         # Apply Title Formatting
+        title_kwargs = {'fontweight': 'bold'}
+        if use_ea_fonts:
+            title_kwargs['fontproperties'] = fontprop_bold
         ax.text(0.0, fmt['title_y'], fmt['title'], fontsize=fmt['title_size'],
-                fontweight='bold', fontproperties=fontprop_bold,
-                transform=ax.transAxes, ha='left')
+                transform=ax.transAxes, ha='left', **title_kwargs)
         if fmt['subtitle']:
             ax.text(0.0, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'],
                     transform=ax.transAxes, ha='left')
@@ -458,7 +523,10 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     ylabel_kwargs['color'] = fmt['colors']
                 else:
                     ylabel_kwargs['color'] = style_colors[0]
-            ax.set_ylabel(fmt['ylabel'], fontweight='bold', fontproperties=fontprop_bold, **ylabel_kwargs)
+            ylabel_font_kwargs = {'fontweight': 'bold'}
+            if use_ea_fonts:
+                ylabel_font_kwargs['fontproperties'] = fontprop_bold
+            ax.set_ylabel(fmt['ylabel'], **ylabel_font_kwargs, **ylabel_kwargs)
         if fmt['xlim']:
             if isinstance(fmt['xlim'][0], str) and isinstance(fmt['xlim'][1], str):
                 ax.set_xlim(pd.to_datetime(fmt['xlim'][0]), pd.to_datetime(fmt['xlim'][1]))
@@ -506,7 +574,10 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     y2label_color = fmt['colors2']
                 else:
                     y2label_color = style_colors[series_count] if series_count < len(style_colors) else style_colors[0]
-                ax2.set_ylabel(fmt['y2label'], fontweight='bold', fontproperties=fontprop_bold, color=y2label_color)
+                y2label_font_kwargs = {'fontweight': 'bold'}
+                if use_ea_fonts:
+                    y2label_font_kwargs['fontproperties'] = fontprop_bold
+                ax2.set_ylabel(fmt['y2label'], color=y2label_color, **y2label_font_kwargs)
             if fmt['y2tickformat']=='pctg': 
                 ax2.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['y2decimals']))
             elif fmt['y2tickformat']=='dec':
