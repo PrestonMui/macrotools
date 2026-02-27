@@ -27,8 +27,8 @@ grid.linewidth: 0.4
 grid.color: "#C8C8C8"
 grid.alpha: 1.0
 
-xtick.labelsize: 11
-ytick.labelsize: 11
+xtick.labelsize: 8
+ytick.labelsize: 8
 xtick.labelcolor: "#1D1D1D"
 ytick.labelcolor: "#1D1D1D"
 xtick.color: "#C8C8C8"
