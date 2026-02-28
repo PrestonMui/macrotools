@@ -5,18 +5,15 @@ MacroTools
 A collection of custom plotting utilities for pulling, organizing, and displaying macroeconomic time series analysis.
 
 Available functions:
-- ea_tsgraph: Create time series graphs in EA house style. Options for formatting.
+- tsgraph: Create time series graphs with customizable styles.
 """
-
-# Register custom font once when package is imported
-from pathlib import Path
-from matplotlib import font_manager
-fontfile = Path(__file__).parent / 'styles' / 'fonts' / 'Montserrat-Regular.ttf'
-font_manager.fontManager.addfont(str(fontfile))
 
 from .time_series_graph import (
 	tsgraph,
-	eacolors
+	default_colors,
+	default_alert_colors,
+	eacolors,
+	ea_alert_colors
 )
 
 from .time_series import (
@@ -40,7 +37,7 @@ from .storage import (
 )
 
 # Define what gets imported with "from macrotools import *"
-__all__ = ['tsgraph', 'eacolors', 'pull_data', 'pull_bls_series', 'search_bls_series', 'alfred_as_reported', 'clear_macrodata_cache', 'store_email', 'get_stored_email', 'store_fred_api_key', 'get_stored_fred_api_key']
+__all__ = ['tsgraph', 'default_colors', 'default_alert_colors', 'eacolors', 'ea_alert_colors', 'pull_data', 'pull_bls_series', 'search_bls_series', 'alfred_as_reported', 'clear_macrodata_cache', 'store_email', 'get_stored_email', 'store_fred_api_key', 'get_stored_fred_api_key']
 
 # Package metadata
 __version__ = '0.1.7'

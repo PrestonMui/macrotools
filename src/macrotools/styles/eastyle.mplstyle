@@ -16,12 +16,25 @@ axes.grid.axis: both
 axes.spines.top: False
 axes.spines.right: False
 
+axes.linewidth: 1.0
+axes.edgecolor: "#C8C8C8"
+
 ytick.major.size: 0
-grid.linewidth: 0.25
 ytick.left: False
 ytick.right: False
 
-axes.prop_cycle: cycler('color', ['40B2FF', 'FF591F','008A6A','2E2A73','EAC14B','B20066','8A2B9C'])
+grid.linewidth: 0.4
+grid.color: "#C8C8C8"
+grid.alpha: 1.0
+
+xtick.labelsize: 8
+ytick.labelsize: 8
+xtick.labelcolor: "#1D1D1D"
+ytick.labelcolor: "#1D1D1D"
+xtick.color: "#C8C8C8"
+ytick.color: "#C8C8C8"
+
+axes.prop_cycle: cycler('color', ['29679B', '008A6A', '2E2A73', '40B2FF', '64748B', '7A3B4E', '8C7E74'])
 
 patch.linewidth: 2.0
 patch.edgecolor: black
@@ -29,3 +42,7 @@ patch.force_edgecolor: True
 axes.facecolor: "#F9F7F5"
 
 axes.autolimit_mode: round_numbers
+
+legend.frameon: False
+
+savefig.dpi: 500

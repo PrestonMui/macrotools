@@ -1,0 +1,48 @@
+font.family: sans-serif
+font.sans-serif: DejaVu Sans, Arial, Helvetica, sans-serif
+
+lines.linewidth: 2.0
+figure.figsize: 9.0, 5.5
+
+figure.facecolor: "#FFFFFF"
+
+figure.titlesize: 20
+axes.labelsize: 11
+
+axes.xmargin: 0
+axes.ymargin: 0
+axes.grid: True
+axes.grid.axis: both
+axes.spines.top: False
+axes.spines.right: False
+
+axes.linewidth: 1.0
+axes.edgecolor: "#888888"
+
+ytick.major.size: 0
+ytick.left: False
+ytick.right: False
+
+grid.linewidth: 0.5
+grid.color: "#E0E0E0"
+grid.alpha: 0.8
+
+xtick.labelsize: 10
+ytick.labelsize: 10
+xtick.labelcolor: "#333333"
+ytick.labelcolor: "#333333"
+xtick.color: "#888888"
+ytick.color: "#888888"
+
+axes.prop_cycle: cycler('color', ['3C3C3C', '4A6FA5', 'D64545', '1B7C6F', 'D4860B', '6E5E8B', '6B7D8A'])
+
+patch.linewidth: 2.0
+patch.edgecolor: black
+patch.force_edgecolor: True
+axes.facecolor: "#FFFFFF"
+
+axes.autolimit_mode: round_numbers
+
+legend.frameon: False
+
+savefig.dpi: 300
