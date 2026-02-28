@@ -2,6 +2,13 @@
 
 ## Version 0
 
+### Version 0.2.0
+- Added new default graph style with Lato font; EA house style now available via `style='ea'`
+- Added `footnote` option to `tsgraph()` for adding footnotes to graphs
+- Added `logo` option to `tsgraph()` for including a logo in the bottom-right corner
+- Added two new colors to the default color palette
+- Various style and layout improvements
+
 ### Version 0.1.7
 - Added 'bgcolor' as format_info entry to change background color of tsgraph()
 
