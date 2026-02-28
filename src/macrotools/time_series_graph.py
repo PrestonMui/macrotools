@@ -163,9 +163,11 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         - 'legend': 'on' or 'off'
         - 'legend_ncol': int - number of columns for legend
 
-        Logo options:
+        Logo and footnote options:
         - 'logo': str - Path to a logo image file (PNG recommended). Placed in the bottom-right corner.
         - 'logo_scale': float - Height of logo as fraction of figure height (default: 0.06)
+        - 'footnote': str - Footnote/attribution text in the bottom-left corner (e.g. 'Source: BLS')
+        - 'footnote_fontsize': float - Font size for footnote text (default: 8)
 
         Colors:
         macrotools comes with two built-in colorblind-friendly color palette:
@@ -326,7 +328,9 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'line2_width': plt.rcParams['lines.linewidth'],
         'bgcolor': None,
         'logo': None,
-        'logo_scale': 0.06
+        'logo_scale': 0.06,
+        'footnote': None,
+        'footnote_fontsize': 8
     }
     
     # Merge user format_info with defaults
@@ -509,18 +513,55 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         title_x = 0.0
 
-        # Apply Logo (bottom-right, below x-axis)
+        # Apply Logo (bottom-right) and Source text (bottom-left)
+        logo_h = fmt['logo_scale'] if fmt['logo'] is not None else 0.04
         if fmt['logo'] is not None:
             logo_img = Image.open(fmt['logo'])
             logo_aspect = logo_img.width / logo_img.height
             pos = ax.get_position()
-            logo_h = fmt['logo_scale']
             logo_w = logo_h * logo_aspect * (fig.get_size_inches()[1] / fig.get_size_inches()[0])
             logo_x = pos.x0 + pos.width - logo_w
             logo_y = 0.0
             logo_ax = fig.add_axes([logo_x, logo_y, logo_w, logo_h])
             logo_ax.imshow(logo_img)
             logo_ax.axis('off')
+
+        if fmt['footnote'] is not None:
+            fn_pos = ax.get_position()
+
+            # Calculate available width in pixels
+            if fmt['logo'] is not None:
+                avail_width_frac = logo_x - fn_pos.x0 - 0.02
+            else:
+                avail_width_frac = fn_pos.width
+            avail_px = avail_width_frac * fig.get_size_inches()[0] * fig.dpi
+
+            # Renderer-based word wrapping (respects manual \n)
+            renderer = fig.canvas.get_renderer()
+            fn_segments = fmt['footnote'].split('\n')
+            wrapped_lines = []
+            for segment in fn_segments:
+                words = segment.split()
+                if not words:
+                    wrapped_lines.append('')
+                    continue
+                current_line = words[0]
+                for word in words[1:]:
+                    candidate = current_line + ' ' + word
+                    t = fig.text(0, 0, candidate, fontsize=fmt['footnote_fontsize'], fontstyle='italic')
+                    w = t.get_window_extent(renderer).width
+                    t.remove()
+                    if w > avail_px:
+                        wrapped_lines.append(current_line)
+                        current_line = word
+                    else:
+                        current_line = candidate
+                wrapped_lines.append(current_line)
+            wrapped_fn = '\n'.join(wrapped_lines)
+
+            fig.text(fn_pos.x0, logo_h / 2, wrapped_fn,
+                     fontsize=fmt['footnote_fontsize'], color='#666666',
+                     va='center', ha='left', fontstyle='italic')
 
         # Apply Title Formatting
         title_kwargs = {'fontweight': 'bold'}
