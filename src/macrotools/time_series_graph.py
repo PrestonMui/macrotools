@@ -456,20 +456,19 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
                     else:
                         mask = np.array([v is not None and not (isinstance(v, float) and np.isnan(v)) for v in y])
 
-                    if fmt['xlim'] is not None:
-                        if xdata is not None:
-                            if isinstance(xdata, dict):
-                                xdata_plot = xdata[label]
-                            else:
-                                xdata_plot = xdata
+                    if xdata is not None:
+                        if isinstance(xdata, dict):
+                            xdata_plot = xdata[label]
                         else:
-                            if isinstance(y, pd.Series):
-                                xdata_plot = y.index
-                            else:
-                                raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
+                            xdata_plot = xdata
+                    else:
+                        if isinstance(y, pd.Series):
+                            xdata_plot = y.index
+                        else:
+                            raise Exception('No x-data detected. Did you mean to pass a pd.Series object? Or an xdata argument?')
 
-                        if xdata_plot is not None:
-                            mask = mask & (xdata_plot >= xlim_min) & (xdata_plot <= xlim_max)
+                    if fmt['xlim'] is not None:
+                        mask = mask & (xdata_plot >= xlim_min) & (xdata_plot <= xlim_max)
 
                     ydata_plot = y if isinstance(y, pd.Series) else np.array(y)
 
