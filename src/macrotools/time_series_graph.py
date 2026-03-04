@@ -165,7 +165,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
 
         Logo and footnote options:
         - 'logo': str - Path to a logo image file (PNG recommended). Placed in the bottom-right corner.
-        - 'logo_scale': float - Height of logo as fraction of figure height (default: 0.06)
+        - 'logo_scale': float - Height of logo as fraction of figure height (default: 0.07)
         - 'footnote': str - Footnote/attribution text in the bottom-left corner (e.g. 'Source: BLS')
         - 'footnote_fontsize': float - Font size for footnote text (default: 8)
 
@@ -328,7 +328,7 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'line2_width': plt.rcParams['lines.linewidth'],
         'bgcolor': None,
         'logo': None,
-        'logo_scale': 0.06,
+        'logo_scale': 0.07,
         'footnote': None,
         'footnote_fontsize': 8
     }
