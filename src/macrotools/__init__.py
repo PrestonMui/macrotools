@@ -25,7 +25,8 @@ from .pull_data import (
 	pull_data,
 	pull_bls_series,
 	search_bls_series,
-	alfred_as_reported
+	alfred_as_reported,
+	get_series_list
 )
 
 from .storage import (
@@ -37,7 +38,7 @@ from .storage import (
 )
 
 # Define what gets imported with "from macrotools import *"
-__all__ = ['tsgraph', 'default_colors', 'default_alert_colors', 'eacolors', 'ea_alert_colors', 'pull_data', 'pull_bls_series', 'search_bls_series', 'alfred_as_reported', 'clear_macrodata_cache', 'store_email', 'get_stored_email', 'store_fred_api_key', 'get_stored_fred_api_key']
+__all__ = ['tsgraph', 'default_colors', 'default_alert_colors', 'eacolors', 'ea_alert_colors', 'pull_data', 'pull_bls_series', 'search_bls_series', 'alfred_as_reported', 'get_series_list', 'clear_macrodata_cache', 'store_email', 'get_stored_email', 'store_fred_api_key', 'get_stored_fred_api_key']
 
 # Package metadata
 __version__ = '0.2.0'

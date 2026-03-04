@@ -13,6 +13,61 @@ from .storage import (
     _get_fred_api_key,
 )
 
+def get_series_list(source):
+    """
+    Return the series catalog for a BLS source as a DataFrame.
+
+    Series catalogs are pre-built CSV files shipped with the macrotools package.
+    Each CSV has two columns: 'series_id' and 'description'. They can be accessed
+    directly as files at:
+
+        import macrotools
+        from pathlib import Path
+        catalog_dir = Path(macrotools.__file__).parent / 'data'
+        # Files: series_ln.csv, series_ce.csv, series_jt.csv, series_ci.csv,
+        #        series_cu.csv, series_pc.csv, series_wp.csv, series_ei.csv,
+        #        series_cx.csv, series_tu.csv
+
+    Or via this function:
+
+        import macrotools as mt
+        df = mt.get_series_list('ln')
+        df[df['description'].str.contains('unemployment rate', case=False)]
+
+    Parameters:
+    -----------
+    source : str
+        BLS source code. Valid sources:
+        'ln': Household Survey
+        'ce': Establishment Survey
+        'jt': JOLTS (Job Openings and Labor Turnover Survey)
+        'ci': ECI (Employment Cost Index)
+        'cu': CPI (Consumer Price Index)
+        'pc': PPI (Producer Price Index) Industry
+        'wp': PPI (Producer Price Index)Commodity
+        'ei': Import/Export Price Indices
+        'cx': CEX (Consumer Expenditures)
+        'tu': Time Use Survey
+
+    Returns:
+    --------
+    pd.DataFrame with columns 'series_id' and 'description'
+    """
+    valid_sources = ['ln', 'ce', 'jt', 'ci', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu']
+    if source not in valid_sources:
+        raise ValueError(
+            f"Invalid source: '{source}'. Valid sources: {', '.join(valid_sources)}"
+        )
+
+    catalog_path = Path(__file__).parent / 'data' / f'series_{source}.csv'
+    if not catalog_path.exists():
+        raise FileNotFoundError(
+            f"Series catalog for '{source}' not found at {catalog_path}. "
+            "The catalog CSV may not have been generated yet."
+        )
+
+    return pd.read_csv(catalog_path)
+
 @timer
 def pull_data(source, email = None, pivot = True, save_file = None, force_refresh=False, cache=True):
 
@@ -149,7 +204,6 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 
         base_url = 'https://download.bls.gov/pub/time.series/' + source + '/'
         flat_file_url = base_url + flat_file_name[source]
-        series_url = base_url + source + '.series'
 
         # Pull flat file data
         headers = {'User-Agent': email}
@@ -198,19 +252,6 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
                         .drop('year', axis=1)
                         .pivot_table(values = 'value', index = 'date', columns = 'series_id')
                         .asfreq('YS'))
-
-        # Attributes
-        data.attrs['data description'] = ''
-
-        # Series
-        if source in ['ln','ce', 'ci', 'cu','pc','wp','cx', 'tu']:
-            r = requests.get(series_url, headers=headers)
-            series = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
-            series.columns = series.columns.str.strip()
-            series['series_id'] = series['series_id'].str.strip()
-            series['series_title'] = series['series_title'].str.strip()
-            series_dict = series.set_index('series_id')['series_title'].to_dict()
-            data.attrs['series'] = series_dict
 
         if save_file: data.to_pickle(save_file)
         if cache: _save_cached_data(data, source, pivot)
@@ -569,7 +610,8 @@ def search_bls_series(source, input):
     else:
         string_list = input
 
-    series_list = pull_data(source, force_refresh=False).attrs['series']
+    catalog = get_series_list(source)
+    series_list = catalog.set_index('series_id')['description'].to_dict()
 
     found_series = []
     for (key, value) in series_list.items():
