@@ -2,6 +2,13 @@
 
 ## Version 0
 
+### Version 0.2.1
+- Bug fix: `tsgraph()` now works with `xdata` when `xlim` is not set
+- Added `get_series_list()` function to look up BLS series IDs and descriptions
+- Shipped static series catalog CSVs for BLS sources (`ln`, `ce`, `ci`, `jt`, `cu`, `pc`, `wp`, `ei`, `cx`, `tu`)
+- Series information is no longer attached as `.attrs` on DataFrames returned by `pull_data()`
+- Changed default logo size from 0.06 to 0.07
+
 ### Version 0.2.0
 - Added new default graph style with Lato font; EA house style now available via `style='ea'`
 - Added `footnote` option to `tsgraph()` for adding footnotes to graphs
