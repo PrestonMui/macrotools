@@ -20,6 +20,9 @@ MacroTools is a public Python package (PyPI: `macrotools`) for pulling, caching,
 
 ## Current Context
 - Preparing for v1.0 release
-- Want to move away from making EA house style the default style of tsgraph (colors, Montserrat font, off-white background `#F9F7F5`).
-- Want to move towards creating a different default graph style, but allow for selecting ea style using `style = 'ea'`; default style should be default and generic.
 - Package currently lacks tests and documentation
+- Graphing functionality: Want to add some features
+    - Zero line (arbitrary line location)
+    - Recession shading (arbitrary dates, default NBER)
+    - Data callouts and/or highlights
+- Used BLS API to grab individual series
