@@ -13,8 +13,37 @@ from .storage import (
     _get_fred_api_key,
 )
 
+def _request_with_retry(url, timeout=None, **kwargs):
+    """Make a GET request, retrying indefinitely on total download timeout.
+
+    The timeout parameter limits the total elapsed time for the entire
+    download, not just individual socket operations.
+    """
+    while True:
+        try:
+            r = requests.get(url, stream=True, **kwargs)
+            chunks = []
+            start = pd.Timestamp.now()
+            for chunk in r.iter_content(chunk_size=8192):
+                if timeout is not None and (pd.Timestamp.now() - start).total_seconds() > timeout:
+                    r.close()
+                    raise requests.exceptions.Timeout(
+                        f"Total download time exceeded {timeout}s"
+                    )
+                chunks.append(chunk)
+            r._content = b''.join(chunks)
+            return r
+        except requests.exceptions.Timeout:
+            print(f"Request to {url} timed out after {timeout}s. Retrying...")
+
 @timer
-def pull_data(source, email = None, pivot = True, save_file = None, force_refresh=False, cache=True):
+def pull_data(source,
+              email = None,
+              pivot = True,
+              save_file = None,
+              force_refresh=False,
+              cache=True,
+              timeout=None):
 
     """
     Pull full data files from BLS and BEA.
@@ -58,6 +87,9 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 
     force_refresh : bool, default=False
         If True, ignore cache and pull fresh data.
+
+    timeout : float or None, default=None
+        Timeout in seconds for HTTP requests. If None, no timeout is applied.
     """
 
     valid_sources = [
@@ -153,7 +185,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 
         # Pull flat file data
         headers = {'User-Agent': email}
-        r = requests.get(flat_file_url, headers=headers)
+        r = _request_with_retry(flat_file_url, timeout=timeout, headers=headers)
         data = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
         
         # Rename columns
@@ -204,7 +236,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 
         # Series
         if source in ['ln','ce', 'ci', 'cu','pc','wp','cx', 'tu']:
-            r = requests.get(series_url, headers=headers)
+            r = _request_with_retry(series_url, timeout=timeout, headers=headers)
             series = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
             series.columns = series.columns.str.strip()
             series['series_id'] = series['series_id'].str.strip()
@@ -311,7 +343,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         freq = 'M'
 
         url_nipa = 'https://apps.bea.gov/national/Release/TXT/NipaData' + freq + '.txt'
-        r = requests.get(url_nipa)
+        r = _request_with_retry(url_nipa, timeout=timeout)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'%SeriesCode': 'series_code', 'Period': 'period', 'Value': 'value'}, inplace=True)
 
@@ -346,7 +378,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
     if source=='ny-mfg':
 
         url = 'https://www.newyorkfed.org/medialibrary/media/Survey/Empire/data/ESMS_SeasonallyAdjusted_Diffusion.csv'
-        r = requests.get(url)
+        r = _request_with_retry(url, timeout=timeout)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
         data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
@@ -358,7 +390,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
     if source=='ny-svc':
 
         url = 'https://www.newyorkfed.org/medialibrary/media/Survey/business_leaders/data/BLS_NotSeasonallyAdjusted_Diffusion.csv'
-        r = requests.get(url)
+        r = _request_with_retry(url, timeout=timeout)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
         data.rename(columns={'surveyDate': 'date'}, inplace=True)
         data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
@@ -370,7 +402,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
     if source=='philly-mfg':
 
         url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/MBOS/Historical-Data/Diffusion-Indexes/bos_dif.csv'
-        r = requests.get(url)
+        r = _request_with_retry(url, timeout=timeout)
         data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
 
         data['date'] = pd.to_datetime(data['DATE'], format='%b-%y')
