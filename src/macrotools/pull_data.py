@@ -584,42 +584,120 @@ def pull_bls_series(series_list: Union[str, List],
     if save_file: data.to_pickle(save_file)
     return data
 
-def search_bls_series(source, input):
-
+def search_bls_series(source: str,
+                      query: str,
+                      sa: Optional[bool] = None,
+                      field: str = 'description',
+                      n: int = 10) -> pd.DataFrame:
     """
-    Function to search the 'series' attribute on series dictionaries in pulled BLS data.
-    
+    Fuzzy-search BLS series catalogs using VS Code-style subsequence matching.
+
+    Splits query on whitespace into tokens. Every token must independently match
+    somewhere in the target string as a subsequence. Returns top n matches ranked
+    by fuzzy match score.
+
     Parameters:
     -----------
-    source: a dataset pulled by pull_data, or one that has a series dictionary stored in source.attrs['series']
+    source : str
+        BLS source code (e.g., 'ln', 'ce', 'cu', 'jt').
 
-    string_list: a list of strings you want to find in the series names, or a single string
+    query : str
+        Search query. Split on whitespace into tokens; each token is matched
+        independently as a subsequence against the target field.
 
-    How it works:
-    -----------
-    search_bls series finds every series name in source.attrs['series'] that contains each string in string_list (case-insensitive). A series name must contain every string in string_list to be returned. search_bls returns a dictionary of series ids and names.
+    sa : bool, optional
+        Filter by seasonal adjustment. Only applies to programs with SA codes
+        (ce, ci, cu, jt, ln, wp). True = seasonally adjusted (3rd char 'S'),
+        False = not seasonally adjusted (3rd char 'U'), None = no filter (default).
 
-    Example:
-    -----------
-    import macrotools as mt
-    found_series = search_bls_series('ce', ['Average Hourly Earnings', 'nonsupervisory', 'mining', 'seAsOnaLly aDjusTed'])
+    field : str, default 'description'
+        Column to search: 'description' or 'id' (searches series_id).
+
+    n : int, default 10
+        Number of top results to return.
+
+    Returns:
+    --------
+    pd.DataFrame
+        Top n matches with columns [series_id, description, score],
+        sorted by score descending.
+
+    Examples:
+    ---------
+        import macrotools as mt
+        mt.search_bls_series('ln', 'labor force level 25 54')
+        mt.search_bls_series('ce', 'total nonfarm', sa=True)
+        mt.search_bls_series('cu', 'SA0', field='id')
     """
-
-    if isinstance(input, str):
-        string_list = [input]
-    else:
-        string_list = input
-
     catalog = get_series_list(source)
-    series_list = catalog.set_index('series_id')['description'].to_dict()
 
-    found_series = []
-    for (key, value) in series_list.items():
-        if all(string.casefold() in value.casefold() for string in string_list):
-            found_series.append(key)
-    
-    print(f'Found {len(found_series)} series that match your search.')
-    return {k: series_list[k] for k in found_series}
+    # Apply seasonal adjustment filter
+    if sa is not None and source in ('ce', 'ci', 'cu', 'jt', 'ln', 'wp'):
+        sa_char = 'S' if sa else 'U'
+        catalog = catalog[catalog['series_id'].str[2] == sa_char]
+
+    tokens = query.lower().split()
+    search_col = 'series_id' if field == 'id' else 'description'
+
+    scores = []
+    for _, row in catalog.iterrows():
+        target = row[search_col].lower()
+        total_score = 0
+        matched = True
+
+        for token in tokens:
+            # Try starting the subsequence match at every position where the
+            # first character matches; keep the best-scoring alignment.
+            best_token_score = -1
+            for start in range(len(target) - len(token) + 1):
+                if target[start] != token[0]:
+                    continue
+                # Score this alignment: greedily match subsequence from start
+                ti = 0  # index into token
+                prev_pos = -2  # position of previous matched char
+                alignment_score = 0
+                for pos in range(start, len(target)):
+                    if ti < len(token) and target[pos] == token[ti]:
+                        char_score = 1  # base
+                        if pos == prev_pos + 1:
+                            char_score += 8  # consecutive
+                        if pos == 0 or target[pos - 1] in ' _-.':
+                            char_score += 5  # word boundary
+                        if pos == 0 and ti == 0:
+                            char_score += 10  # prefix
+                        alignment_score += char_score
+                        prev_pos = pos
+                        ti += 1
+                if ti == len(token):  # full token matched
+                    # Exact substring bonuses
+                    idx = target.find(token)
+                    if idx == 0:
+                        alignment_score += 35
+                    elif idx > 0:
+                        alignment_score += 20
+                    if alignment_score > best_token_score:
+                        best_token_score = alignment_score
+
+            if best_token_score < 0:
+                matched = False
+                break
+            total_score += best_token_score
+
+        # Brevity normalization: concise matches rank above verbose ones
+        if matched:
+            score = round(total_score * 1000 / len(target))
+            # Zero bonus: boost aggregate/national series (more 0s in ID)
+            if source in ('ce', 'ci', 'cu', 'jt', 'ln'):
+                score += row['series_id'].count('0') * 200
+            scores.append(score)
+        else:
+            scores.append(None)
+
+    catalog = catalog.copy()
+    catalog['score'] = pd.array(scores, dtype=pd.Int64Dtype())
+    result = catalog.dropna(subset=['score'])
+    result = result.nlargest(n, 'score')[['series_id', 'description', 'score']]
+    return result.reset_index(drop=True)
 
 @timer
 def alfred_as_reported(
