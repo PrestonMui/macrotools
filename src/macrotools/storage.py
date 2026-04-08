@@ -297,3 +297,74 @@ def _get_fred_api_key(api_key: Optional[str] = None) -> str:
             store_fred_api_key(api_key)
 
     return api_key
+
+
+def store_bls_api_key(api_key: str) -> None:
+    """
+    Store a BLS API registration key for data pulls.
+
+    Parameters:
+    -----------
+    api_key : str
+        BLS API registration key to store
+    """
+    credentials = _load_credentials()
+    credentials['bls_api_key'] = api_key
+    _save_credentials(credentials)
+    print("BLS API key stored successfully")
+
+
+def get_stored_bls_api_key() -> Optional[str]:
+    """
+    Get the stored BLS API registration key.
+
+    Returns:
+    --------
+    str or None
+        The stored API key, or None if not set
+    """
+    credentials = _load_credentials()
+    return credentials.get('bls_api_key')
+
+
+def _get_bls_api_key(api_key: Optional[str] = None) -> str:
+    """
+    Get BLS API key to use for requests.
+
+    Priority:
+    1. If api_key is provided as argument, use it
+    2. If api_key is stored, use stored api_key
+    3. Check environment variable BLS_API_KEY
+    4. Otherwise, prompt user for api_key
+
+    Parameters:
+    -----------
+    api_key : str, optional
+        API key provided by user
+
+    Returns:
+    --------
+    str
+        API key to use
+    """
+    if api_key:
+        return api_key
+
+    stored_key = get_stored_bls_api_key()
+    if stored_key:
+        return stored_key
+
+    # Check environment variable
+    env_key = os.getenv('BLS_API_KEY')
+    if env_key:
+        return env_key
+
+    # Prompt user for API key
+    print("BLS API key is required. Register free at: https://data.bls.gov/registrationEngine/")
+    api_key = input("Please enter your BLS API key: ").strip()
+    if api_key:
+        store_choice = input("Would you like to store this API key for future use? (y/n): ").strip().lower()
+        if store_choice == 'y':
+            store_bls_api_key(api_key)
+
+    return api_key

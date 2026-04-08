@@ -11,6 +11,7 @@ from .storage import (
     _save_cached_data,
     _get_email_for_bls,
     _get_fred_api_key,
+    _get_bls_api_key,
 )
 
 def get_series_list(source):
@@ -513,11 +514,13 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
 def pull_bls_series(series_list: Union[str, List],
     date_range = None,
     save_file: Optional[str] = None,
-    force_refresh=False):
+    force_refresh=False,
+    source: str = 'flatfiles',
+    api_key: Optional[str] = None):
 
     """
     Pull single or multiple data series from the BLS.
-    
+
     Parameters:
     -----------
     series_list: either a string or list of strings. For example
@@ -531,6 +534,17 @@ def pull_bls_series(series_list: Union[str, List],
     Optional: save_file - save as pickle
         e.g. 'data.pkl'
 
+    source : str, default 'flatfiles'
+        Data source method.
+        'flatfiles': Download full BLS flat files (default, best for large pulls)
+        'api': Use BLS API v2 (faster for a small number of specific series)
+
+    api_key : str, optional
+        BLS API v2 registration key. Only used when source='api'.
+        If not provided, will check stored credentials, environment variable
+        BLS_API_KEY, or prompt user. Register free at:
+        https://data.bls.gov/registrationEngine/
+
     Returns a pivot table with a DateTimeIndex and the series_list as columns.
 
     WARNING: Only use this for monthly data series at this time.
@@ -539,47 +553,124 @@ def pull_bls_series(series_list: Union[str, List],
     if isinstance(series_list, str):
         series_list = [series_list]
 
-    valid_sources = [
-        'ce',
-        'ln',
-        'ci',
-        'jt',
-        'cu',
-        'pc',
-        'wp',
-        'ei',
-        'cx',
-        'tu'
-    ]
+    if source not in ('flatfiles', 'api'):
+        raise ValueError(f"Invalid source: '{source}'. Must be 'flatfiles' or 'api'.")
 
-    data_list = []
-    for series in series_list:
-        
-        if series[0:2].lower() not in valid_sources:
+    if source == 'flatfiles':
+
+        valid_sources = [
+            'ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu'
+        ]
+
+        data_list = []
+        for series in series_list:
+
+            if series[0:2].lower() not in valid_sources:
+                raise ValueError(
+                f"Invalid series prefix: '{series[0:2].lower()}'. "
+                """
+                Please choose a series from one of the following BLS sources:
+                'ce': Establishment Survey
+                'ln': Household Survey
+                'ci': ECI
+                'jt': JOLTS
+                'cu': CPI
+                'pc': PPI Industry
+                'wp': PPI Commodity
+                'ei': Import and Export Price Indices
+                'cx': Consumer Expenditures Survey
+                'tu': Time Use Survey
+                """
+            )
+
+            if date_range:
+                individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh).loc[date_range[0]:date_range[1]][series]
+            else:
+                individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh)[series]
+            data_list.append(individual_series)
+
+        data = pd.concat(data_list, axis=1)
+
+    elif source == 'api':
+
+        api_key = _get_bls_api_key(api_key)
+
+        # Determine year range
+        if date_range:
+            start_year = int(date_range[0].split('-')[0])
+            end_year = int(date_range[1].split('-')[0])
+        else:
+            end_year = pd.Timestamp.now().year
+            start_year = end_year - 9
+
+        # Build year chunks (max 10 years per API request)
+        year_chunks = []
+        y = start_year
+        while y <= end_year:
+            chunk_end = min(y + 9, end_year)
+            year_chunks.append((str(y), str(chunk_end)))
+            y = chunk_end + 1
+
+        # Build series chunks (max 50 per API request)
+        series_chunks = [series_list[i:i+50] for i in range(0, len(series_list), 50)]
+
+        # Fetch data from BLS API v2
+        all_records = []
+        for s_chunk in series_chunks:
+            for y_start, y_end in year_chunks:
+                payload = {
+                    'seriesid': s_chunk,
+                    'startyear': y_start,
+                    'endyear': y_end,
+                    'registrationkey': api_key,
+                }
+                import json
+                response = requests.post(
+                    'https://api.bls.gov/publicAPI/v2/timeseries/data/',
+                    data=json.dumps(payload),
+                    headers={'Content-Type': 'application/json'}
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                if result.get('status') != 'REQUEST_SUCCEEDED':
+                    raise RuntimeError(
+                        f"BLS API error: {result.get('message', result.get('status', 'Unknown error'))}"
+                    )
+
+                for series_obj in result['Results']['series']:
+                    sid = series_obj['seriesID']
+                    for obs in series_obj['data']:
+                        all_records.append({
+                            'series_id': sid,
+                            'year': obs['year'],
+                            'period': obs['period'],
+                            'value': obs['value'],
+                        })
+
+        if not all_records:
+            raise ValueError("No data returned from BLS API for the requested series and date range.")
+
+        raw = pd.DataFrame(all_records)
+        raw['value'] = pd.to_numeric(raw['value'], errors='coerce')
+
+        # Filter to monthly observations (M01-M12, exclude M13 annual averages)
+        monthly = raw[raw['period'].str.match(r'^M(0[1-9]|1[0-2])$')].copy()
+        if monthly.empty:
             raise ValueError(
-            f"Invalid source: '{source}'. "
-            """
-            Please choose a series from one of the following BLS sources:
-            'ce': Establishment Survey
-            'ln': Household Survey
-            'ci': ECI
-            'jt': JOLTS
-            'cu': CPI
-            'pc': PPI Industry
-            'wp': PPI Commodity
-            'ei': Import and Export Price Indices
-            'cx': Consumer Expenditures Survey
-            'tu': Time Use Survey
-            """
+                "No monthly data found in API response. "
+                "pull_bls_series currently only supports monthly series."
+            )
+        monthly['date'] = pd.to_datetime(
+            monthly['year'].astype(str) + '-' + monthly['period'].str[1:].astype(str),
+            format='%Y-%m'
         )
 
+        data = monthly.pivot_table(values='value', index='date', columns='series_id').sort_index()
+        data.columns.name = None
+
         if date_range:
-            individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh).loc[date_range[0]:date_range[1]][series]
-        else:
-            individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh)[series]
-        data_list.append(individual_series)
-    
-    data = pd.concat(data_list, axis=1)
+            data = data.loc[date_range[0]:date_range[1]]
 
     if save_file: data.to_pickle(save_file)
     return data
