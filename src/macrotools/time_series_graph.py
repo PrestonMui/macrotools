@@ -163,6 +163,13 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         - 'legend': 'on' or 'off'
         - 'legend_ncol': int - number of columns for legend
 
+        Horizontal line options:
+        - 'hline': numeric, dict, or list of dicts — Draw horizontal reference line(s).
+            - numeric: draws a line at that y-value with default styling
+            - dict: {'y': value, 'color': str, 'linewidth': float, 'linestyle': str, 'label': str}
+              Only 'y' is required; others default to color='#C8C8C8', linewidth=1.0, linestyle='-', label=None.
+            - list of dicts: draws multiple horizontal lines
+
         Logo and footnote options:
         - 'logo': str - Path to a logo image file (PNG recommended). Placed in the bottom-right corner.
         - 'logo_scale': float - Height of logo as fraction of figure height (default: 0.07)
@@ -330,7 +337,8 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         'logo': None,
         'logo_scale': 0.07,
         'footnote': None,
-        'footnote_fontsize': 8
+        'footnote_fontsize': 8,
+        'hline': None
     }
     
     # Merge user format_info with defaults
@@ -608,6 +616,21 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
         if fmt['xaxiscross'] is not None:
             ax.axhline(y=fmt['xaxiscross'], color='black', linewidth=0.8)
             ax.spines['bottom'].set_position(('outward', 0))
+
+        # Draw horizontal reference lines
+        if fmt['hline'] is not None:
+            hlines = fmt['hline'] if isinstance(fmt['hline'], list) else [fmt['hline']]
+            for hl in hlines:
+                if isinstance(hl, (int, float)):
+                    ax.axhline(y=hl, color='#3C3C3C', linewidth=1.0, linestyle='-')
+                elif isinstance(hl, dict):
+                    ax.axhline(
+                        y=hl['y'],
+                        color=hl.get('color', '#3C3C3C'),
+                        linewidth=hl.get('linewidth', 1.0),
+                        linestyle=hl.get('linestyle', '-'),
+                        label=hl.get('label', None),
+                    )
 
         # Format x-axis based on data frequency
         if fmt['xfreq'] == 'Y':
