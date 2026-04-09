@@ -580,38 +580,52 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             ax.text(title_x, fmt['subtitle_y'], fmt['subtitle'], fontsize=fmt['subtitle_size'],
                     transform=ax.transAxes, ha='left')
 
-        # Apply axis formating
+        # Apply axis formatting
         if fmt['xlabel']:
             ax.set_xlabel(fmt['xlabel'])
-        if fmt['ylabel']:
-            ylabel_kwargs = {}
-            if y2data is not None:
-                if isinstance(fmt['colors'], list):
-                    ylabel_kwargs['color'] = fmt['colors'][0]
-                elif isinstance(fmt['colors'], str):
-                    ylabel_kwargs['color'] = fmt['colors']
-                else:
-                    ylabel_kwargs['color'] = style_colors[0]
-            ylabel_font_kwargs = {'fontweight': 'bold'}
-            if use_ea_fonts:
-                ylabel_font_kwargs['fontproperties'] = fontprop_bold
-            ax.set_ylabel(fmt['ylabel'], **ylabel_font_kwargs, **ylabel_kwargs)
         if fmt['xlim']:
             if isinstance(fmt['xlim'][0], str) and isinstance(fmt['xlim'][1], str):
                 ax.set_xlim(pd.to_datetime(fmt['xlim'][0]), pd.to_datetime(fmt['xlim'][1]))
             else:
                 ax.set_xlim(fmt['xlim'])
-        if fmt['ylim']:
-            ax.set_ylim(fmt['ylim'])
-        if fmt['yticksize']:
-            ax.set_yticks(np.arange(fmt['ylim'][0], fmt['ylim'][1] + fmt['yticksize'] / 10, fmt['yticksize']))
-        if fmt['ytickformat']=='pctg':
-            ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['ydecimals']))
-        elif fmt['ytickformat']=='dec':
-            if fmt['ydecimals'] is None:
-                ax.yaxis.set_major_formatter(mtick.ScalarFormatter())
-            else:
-                ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["ydecimals"]}f}}'))
+
+        # Apply y-axis formatting (primary and secondary)
+        axes_config = [(ax, '', fmt['colors'], 0)]
+        if y2data is not None:
+            ax2.spines[['right']].set_visible(True)
+            ax2.spines['right'].set_linewidth(1.0)
+            ax2.spines['right'].set_color('#C8C8C8')
+            axes_config.append((ax2, '2', fmt['colors2'], series_count))
+
+        for target_ax, sfx, ax_colors, color_offset in axes_config:
+            if fmt[f'y{sfx}lim']:
+                target_ax.set_ylim(fmt[f'y{sfx}lim'])
+            if fmt[f'y{sfx}label']:
+                ylabel_kwargs = {}
+                if y2data is not None:
+                    if isinstance(ax_colors, list):
+                        ylabel_kwargs['color'] = ax_colors[0]
+                    elif isinstance(ax_colors, str):
+                        ylabel_kwargs['color'] = ax_colors
+                    else:
+                        ylabel_kwargs['color'] = style_colors[color_offset] if color_offset < len(style_colors) else style_colors[0]
+                ylabel_font_kwargs = {'fontweight': 'bold'}
+                if use_ea_fonts:
+                    ylabel_font_kwargs['fontproperties'] = fontprop_bold
+                target_ax.set_ylabel(fmt[f'y{sfx}label'], **ylabel_font_kwargs, **ylabel_kwargs)
+            if fmt[f'y{sfx}ticksize']:
+                target_ax.set_yticks(np.arange(
+                    fmt[f'y{sfx}lim'][0],
+                    fmt[f'y{sfx}lim'][1] + fmt[f'y{sfx}ticksize'] / 10,
+                    fmt[f'y{sfx}ticksize']
+                ))
+            if fmt[f'y{sfx}tickformat'] == 'pctg':
+                target_ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt[f'y{sfx}decimals']))
+            elif fmt[f'y{sfx}tickformat'] == 'dec':
+                if fmt[f'y{sfx}decimals'] is None:
+                    target_ax.yaxis.set_major_formatter(mtick.ScalarFormatter())
+                else:
+                    target_ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt[f"y{sfx}decimals"]}f}}'))
 
         if fmt['xaxiscross'] is not None:
             ax.axhline(y=fmt['xaxiscross'], color='black', linewidth=0.8)
@@ -643,34 +657,6 @@ def tsgraph(ydata: Union[List, np.ndarray, Dict],
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
             if fmt['xinterval']:
                 ax.xaxis.set_major_locator(mdates.MonthLocator(interval=fmt['xinterval']))
-
-        # Apply Second Y-axis Formating
-        if y2data is not None:
-            ax2.spines[['right']].set_visible(True)
-            ax2.spines['right'].set_linewidth(1.0)
-            ax2.spines['right'].set_color('#C8C8C8')
-            if fmt['y2lim']:
-                ax2.set_ylim(fmt['y2lim'])
-            if fmt['y2label']:
-                if isinstance(fmt['colors2'], list):
-                    y2label_color = fmt['colors2'][0]
-                elif isinstance(fmt['colors2'], str):
-                    y2label_color = fmt['colors2']
-                else:
-                    y2label_color = style_colors[series_count] if series_count < len(style_colors) else style_colors[0]
-                y2label_font_kwargs = {'fontweight': 'bold'}
-                if use_ea_fonts:
-                    y2label_font_kwargs['fontproperties'] = fontprop_bold
-                ax2.set_ylabel(fmt['y2label'], color=y2label_color, **y2label_font_kwargs)
-            if fmt['y2tickformat']=='pctg': 
-                ax2.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=fmt['y2decimals']))
-            elif fmt['y2tickformat']=='dec':
-                if fmt['y2decimals'] is None:
-                    ax2.yaxis.set_major_formatter(mtick.ScalarFormatter())
-                else:
-                    ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{fmt["y2decimals"]}f}}'))
-            if fmt['y2ticksize']:
-                ax2.set_yticks(np.arange(fmt['y2lim'][0], fmt['y2lim'][1] + fmt['y2ticksize'] / 10, fmt['y2ticksize']))
 
         # Apply Legend
         if fmt['legend']=='on':
