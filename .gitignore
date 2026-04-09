@@ -8,3 +8,5 @@ build/
 dist/
 .claude\settings.local.json
 examples/output/
+tests/__pycache__/*
+.claude/settings.local.json
