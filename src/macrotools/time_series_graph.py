@@ -90,6 +90,25 @@ ea_alert_colors = {
 }
 
 ########################################
+# NBER RECESSION DATES
+########################################
+
+NBER_RECESSIONS = [
+    ('1857-06', '1858-12'), ('1860-10', '1861-06'), ('1865-04', '1867-12'),
+    ('1869-06', '1870-12'), ('1873-10', '1879-03'), ('1882-03', '1885-05'),
+    ('1887-03', '1888-04'), ('1890-07', '1891-05'), ('1893-01', '1894-06'),
+    ('1895-12', '1897-06'), ('1899-06', '1900-12'), ('1902-09', '1904-08'),
+    ('1907-05', '1908-06'), ('1910-01', '1912-01'), ('1913-01', '1914-12'),
+    ('1918-08', '1919-03'), ('1920-01', '1921-07'), ('1923-05', '1924-07'),
+    ('1926-10', '1927-11'), ('1929-08', '1933-03'), ('1937-05', '1938-06'),
+    ('1945-02', '1945-10'), ('1948-11', '1949-10'), ('1953-07', '1954-05'),
+    ('1957-08', '1958-04'), ('1960-04', '1961-02'), ('1969-12', '1970-11'),
+    ('1973-11', '1975-03'), ('1980-01', '1980-07'), ('1981-07', '1982-11'),
+    ('1990-07', '1991-03'), ('2001-03', '2001-11'), ('2007-12', '2009-06'),
+    ('2020-02', '2020-04'),
+]
+
+########################################
 # GRAPHING FUNCTION
 ########################################
 
@@ -139,6 +158,9 @@ def tsgraph(series,
         - 'lim': tuple — (min, max), strings or datetime objects
         - 'interval': int — number of periods between ticks
         - 'freq': 'M' (default) or 'Y' — tick frequency
+        - 'shading': 'nber' for NBER recession shading, or a list of (start, end) tuples
+          for custom shading periods. Dates can be strings or datetime objects.
+        - 'shading_color': str (default '#DCDCDC') — color for shading regions
 
     yaxis : dict, optional
         - 'label': str — axis label
@@ -300,7 +322,8 @@ def tsgraph(series,
     # Merge option dicts with defaults
     ########################################
 
-    xo = {**{'label': '', 'lim': None, 'interval': None, 'freq': 'M'}, **(xaxis or {})}
+    xo = {**{'label': '', 'lim': None, 'interval': None, 'freq': 'M',
+             'shading': None, 'shading_color': '#DCDCDC'}, **(xaxis or {})}
     yo = {**{'label': '', 'lim': None, 'ticksize': None, 'tickformat': 'dec', 'decimals': None}, **(yaxis or {})}
     yr = {**{'label': '', 'lim': None, 'ticksize': None, 'tickformat': 'dec', 'decimals': 0}, **(yaxis_rhs or {})}
 
@@ -345,6 +368,19 @@ def tsgraph(series,
         # Per-axis grid styling
         ########################################
         ax.xaxis.grid(True, color='#D4D4D4', linewidth=0.25, alpha=1.0)
+
+        ########################################
+        # Recession / custom shading
+        ########################################
+        if xo['shading'] is not None:
+            if xo['shading'] == 'nber':
+                shading_periods = [(pd.to_datetime(s), pd.to_datetime(e)) for s, e in NBER_RECESSIONS]
+            else:
+                shading_periods = [(pd.to_datetime(s) if isinstance(s, str) else s,
+                                    pd.to_datetime(e) if isinstance(e, str) else e)
+                                   for s, e in xo['shading']]
+            for start, end in shading_periods:
+                ax.axvspan(start, end, color=xo['shading_color'], alpha=0.5, zorder=0, linewidth=0)
 
         ########################################
         # Auto-assign colors from style cycle

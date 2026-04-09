@@ -204,6 +204,31 @@ mt.tsgraph(
     save_path=str(output_dir / '13_callout_bottom.png'),
 )
 plt.close()
-print('13_callout_bottom.png')
+print('13/15  13_callout_bottom.png')
+
+# 14. NBER recession shading
+mt.tsgraph(
+    series=data['LNS12300060'] / 100,
+    xaxis={'lim': ('2005-01', '2025-06'), 'interval': 12, 'shading': 'nber'},
+    yaxis={'lim': (0.69, 0.82), 'ticksize': 0.02, 'tickformat': 'pctg', 'decimals': 0},
+    title={'title': 'NBER Recession Shading'},
+    save_path=str(output_dir / '14_nber_shading.png'),
+    style='ea'
+)
+plt.close()
+print('14/15  14_nber_shading.png')
+
+# 15. Custom shading with color override
+mt.tsgraph(
+    series=data['LNS12300060'] / 100,
+    xaxis={'lim': ('2019-01', '2025-06'), 'interval': 6,
+           'shading': [('2020-03', '2020-06'), ('2022-01', '2022-06')],
+           'shading_color': '#FFD0D0'},
+    yaxis={'lim': (0.69, 0.82), 'ticksize': 0.02, 'tickformat': 'pctg', 'decimals': 0},
+    title={'title': 'Custom Shading'},
+    save_path=str(output_dir / '15_custom_shading.png'),
+)
+plt.close()
+print('15/15  15_custom_shading.png')
 
 print(f'\nAll graphs saved to {output_dir.resolve()}')
