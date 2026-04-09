@@ -122,6 +122,16 @@ def tsgraph(series,
             - 'color': line color; auto-assigned from style cycle if omitted
             - 'linestyle': '-', '--', '-.', or ':' (default '-')
             - 'linewidth': float (default from style)
+            - 'callout': dict or list of dicts — annotate data points with a marker and text.
+              Each dict has keys:
+                - 'x': (required) x-value to annotate, or 'last' for the last visible point
+                - 'text': str (optional) — annotation text. If omitted, shows the y-value
+                  formatted to match the axis (pctg/dec), with 1 decimal by default.
+                - 'align': 'above' (default), 'below', 'left', or 'right'
+                - 'decimals': int (default 1) — decimal places when auto-formatting the value
+                - 'fontsize': float (default 9)
+                - 'color': str (defaults to the series line color)
+                - 'marker_size': float (default 6)
         - A list of any combination of the above
 
     xaxis : dict, optional
@@ -263,7 +273,8 @@ def tsgraph(series,
         if isinstance(entry, pd.DataFrame):
             for col in entry.columns:
                 normalized.append({'y': entry[col], 'x': entry.index, 'label': col,
-                                   'axis': 'left', 'color': None, 'linestyle': None, 'linewidth': None})
+                                   'axis': 'left', 'color': None, 'linestyle': None, 'linewidth': None,
+                                   'callout': None})
         elif isinstance(entry, dict):
             if 'y' not in entry:
                 raise ValueError("Series dict must contain a 'y' key with the data to plot.")
@@ -271,13 +282,16 @@ def tsgraph(series,
                 'y': entry['y'], 'x': entry.get('x'), 'label': entry.get('label'),
                 'axis': entry.get('axis', 'left'), 'color': entry.get('color'),
                 'linestyle': entry.get('linestyle'), 'linewidth': entry.get('linewidth'),
+                'callout': entry.get('callout'),
             })
         elif isinstance(entry, pd.Series):
             normalized.append({'y': entry, 'x': None, 'label': entry.name,
-                               'axis': 'left', 'color': None, 'linestyle': None, 'linewidth': None})
+                               'axis': 'left', 'color': None, 'linestyle': None, 'linewidth': None,
+                               'callout': None})
         else:
             normalized.append({'y': entry, 'x': None, 'label': None,
-                               'axis': 'left', 'color': None, 'linestyle': None, 'linewidth': None})
+                               'axis': 'left', 'color': None, 'linestyle': None, 'linewidth': None,
+                               'callout': None})
 
     total_series = len(normalized)
     has_right_axis = any(s['axis'] == 'right' for s in normalized)
@@ -383,6 +397,62 @@ def tsgraph(series,
                 mask = mask & (x >= xlim_min) & (x <= xlim_max)
 
             target_ax.plot(x[mask], y[mask], **plot_kwargs)
+
+            # Draw data callouts
+            if s['callout'] is not None:
+                callouts = s['callout'] if isinstance(s['callout'], list) else [s['callout']]
+                yopt_for_callout = yr if s['axis'] == 'right' else yo
+                for co in callouts:
+                    # Resolve x position
+                    co_x = co['x']
+                    if co_x == 'last':
+                        co_x = x[mask].max() if hasattr(x[mask], 'max') else x[mask][-1]
+                    else:
+                        co_x = pd.to_datetime(co_x) if isinstance(co_x, str) else co_x
+
+                    # Look up y value at that x
+                    if isinstance(y, pd.Series):
+                        co_y = y.loc[co_x] if co_x in y.index else y.iloc[y.index.get_indexer([co_x], method='nearest')[0]]
+                    else:
+                        idx = np.argmin(np.abs(np.array(x) - co_x))
+                        co_y = y[idx]
+
+                    # Format text
+                    if 'text' in co:
+                        co_text = co['text']
+                    else:
+                        co_decimals = co.get('decimals', 1)
+                        if yopt_for_callout['tickformat'] == 'pctg':
+                            co_text = f'{co_y * 100:.{co_decimals}f}%'
+                        else:
+                            co_text = f'{co_y:,.{co_decimals}f}'
+
+                    # Alignment → offset direction
+                    co_align = co.get('align', 'above')
+                    offset_map = {
+                        'above': (0, 6), 'below': (0, -6),
+                        'left': (-6, 0), 'right': (6, 0),
+                    }
+                    ha_map = {'above': 'center', 'below': 'center', 'left': 'right', 'right': 'left'}
+                    va_map = {'above': 'bottom', 'below': 'top', 'left': 'center', 'right': 'center'}
+
+                    co_color = co.get('color', s['color'])
+                    co_fontsize = co.get('fontsize', 9)
+                    co_marker_size = co.get('marker_size', 6)
+
+                    # Draw marker
+                    target_ax.plot(co_x, co_y, 'o', color=co_color, markersize=co_marker_size, zorder=5)
+
+                    # Draw text
+                    target_ax.annotate(
+                        co_text,
+                        xy=(co_x, co_y),
+                        xytext=offset_map[co_align],
+                        textcoords='offset points',
+                        ha=ha_map[co_align], va=va_map[co_align],
+                        fontsize=co_fontsize, color=co_color,
+                        zorder=5,
+                    )
 
         ########################################
         # Apply Formatting

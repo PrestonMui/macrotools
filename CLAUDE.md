@@ -20,8 +20,6 @@ MacroTools is a public Python package (PyPI: `macrotools`) for pulling, caching,
 
 ## Current Context
 - Preparing for v1.0 release
-- Package currently lacks tests and documentation
 - Graphing functionality: Want to add some features
     - Recession shading (arbitrary dates, default NBER)
     - Data callouts and/or highlights
-- Used BLS API to grab individual series
