@@ -27,15 +27,10 @@ data = mt.pull_data('ln')
 
 # Plot prime-age employment rate
 fig = mt.tsgraph(
-    data['LNS12300060'] / 100,
-    format_info={
-        'title': 'Prime-Age Employment Rate',
-        'xlim': ('2019-01', '2025-06'),
-        'ylim': (0.76, 0.82),
-        'yticksize': 0.01,
-        'ydecimals': 0,
-        'ytickformat': 'pctg',
-    }
+    series=data['LNS12300060'] / 100,
+    xaxis={'lim': ('2019-01', '2025-06')},
+    yaxis={'lim': (0.76, 0.82), 'ticksize': 0.01, 'tickformat': 'pctg', 'decimals': 0},
+    title={'title': 'Prime-Age Employment Rate'},
 )
 plt.show()
 ```
