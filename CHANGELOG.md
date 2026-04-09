@@ -2,6 +2,15 @@
 
 ## Version 0
 
+### Version 0.3.0
+- Major refactor of `tsgraph()` for readability; series input now uses a unified parameter format (see docstring)
+- Added recession shading via `xaxis={'shading': 'nber'}` or custom date ranges
+- Added data callouts: annotate specific data points with markers and text labels
+- Added horizontal line option `hline` to `tsgraph()`
+- Added `source='api'` option to `pull_bls_series()` for faster small pulls
+- Improved `search_bls_series()` to use fuzzy matching instead of exact substring matching
+- Added test infrastructure and visual gallery
+
 ### Version 0.2.1
 - Bug fix: `tsgraph()` now works with `xdata` when `xlim` is not set
 - Added `get_series_list()` function to look up BLS series IDs and descriptions
