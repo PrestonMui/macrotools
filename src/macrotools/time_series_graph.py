@@ -486,6 +486,7 @@ def tsgraph(series,
                         xytext=offset_map[co_align],
                         textcoords='offset points',
                         ha=ha_map[co_align], va=va_map[co_align],
+                        multialignment='center',
                         fontsize=co_fontsize, color=co_color,
                         zorder=5,
                     )
