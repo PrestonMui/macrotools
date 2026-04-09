@@ -6,3 +6,4 @@ build/
 .macrodata_cache/
 *.pkl
 dist/
+.claude\settings.local.json
