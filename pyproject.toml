@@ -16,6 +16,7 @@ dependencies = [
     'numpy>=2.0.0',
     'statsmodels>=0.14.4',
     'pandas>=2.2.3',
+    'pyarrow>=14.0.0',
     'requests>=2.32.3',
     'Pillow>=10.0.0'
 ]
