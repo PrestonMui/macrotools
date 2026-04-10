@@ -9,6 +9,7 @@ from .storage import (
     _should_refresh_cache,
     _load_cached_data,
     _save_cached_data,
+    _save_dataframe,
     _get_email_for_bls,
     _get_fred_api_key,
     _get_bls_api_key,
@@ -107,7 +108,9 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         Provide an email address to pull files from the BLS.
 
     save_file : str
-        Provide a filepath to save the file as a .pkl file.
+        Provide a filepath to save the pulled data.
+        Format is inferred from the extension:
+        .pkl/.pickle -> pickle; anything else -> parquet (default).
 
     cache : bool, default=True
         If True, use cached data if available (up to 7 days old).
@@ -180,7 +183,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         cached_data = _load_cached_data(source, pivot)
         if cached_data is not None:
             if save_file:
-                cached_data.to_pickle(save_file)
+                _save_dataframe(cached_data, save_file)
             return cached_data
 
     print(f"Pulling data from source: {source}")
@@ -254,7 +257,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
                         .pivot_table(values = 'value', index = 'date', columns = 'series_id')
                         .asfreq('YS'))
 
-        if save_file: data.to_pickle(save_file)
+        if save_file: _save_dataframe(data, save_file)
         if cache: _save_cached_data(data, source, pivot)
         return data
 
@@ -342,7 +345,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         stclaims.attrs['series'] = column_descriptions
         stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
-        if save_file: stclaims.to_pickle(save_file)
+        if save_file: _save_dataframe(stclaims, save_file)
         if cache: _save_cached_data(stclaims, source, pivot)
         return stclaims
     
@@ -531,8 +534,9 @@ def pull_bls_series(series_list: Union[str, List],
     Optional: date_range: tuple
         e.g. ('2020', '2021') or ('2020-3', '2021-6')
 
-    Optional: save_file - save as pickle
-        e.g. 'data.pkl'
+    Optional: save_file - save pulled data to file.
+        Format is inferred from extension: .pkl/.pickle -> pickle;
+        anything else -> parquet (default). e.g. 'data.parquet'
 
     source : str, default 'flatfiles'
         Data source method.
@@ -672,7 +676,7 @@ def pull_bls_series(series_list: Union[str, List],
         if date_range:
             data = data.loc[date_range[0]:date_range[1]]
 
-    if save_file: data.to_pickle(save_file)
+    if save_file: _save_dataframe(data, save_file)
     return data
 
 def search_bls_series(source: str,

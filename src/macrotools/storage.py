@@ -2,7 +2,8 @@
 Storage module for caching and credentials management.
 
 Handles:
-- Data caching (pickle files with TTL)
+- Data caching (parquet files with TTL, with .meta.json for DataFrame attrs)
+- User-facing save/load (parquet by default, pickle for .pkl/.pickle extensions)
 - Credentials storage (email, API keys, etc.)
 """
 
@@ -12,6 +13,69 @@ import json
 import os
 import time
 from pathlib import Path
+
+
+# ============================================================================
+# Parquet + Metadata Helpers
+# ============================================================================
+
+def _save_attrs_meta(meta_path: Path, attrs: dict) -> None:
+    """Save DataFrame.attrs to a companion JSON file."""
+    if not attrs:
+        return
+    serializable = {}
+    for key, value in attrs.items():
+        try:
+            json.dumps(value, default=str)
+            serializable[key] = value
+        except (TypeError, ValueError):
+            serializable[key] = str(value)
+    with open(meta_path, 'w') as f:
+        json.dump(serializable, f, indent=2, default=str)
+
+
+def _load_attrs_meta(meta_path: Path) -> dict:
+    """Load DataFrame.attrs from a companion JSON file."""
+    if not meta_path.exists():
+        return {}
+    try:
+        with open(meta_path, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_parquet(data: pd.DataFrame, parquet_path: Path) -> None:
+    """Save a DataFrame as parquet + companion .meta.json for attrs."""
+    data.to_parquet(parquet_path)
+    meta_path = parquet_path.with_suffix('.meta.json')
+    _save_attrs_meta(meta_path, data.attrs)
+
+
+def _load_parquet(parquet_path: Path) -> pd.DataFrame:
+    """Load a DataFrame from parquet and restore attrs from companion .meta.json."""
+    data = pd.read_parquet(parquet_path)
+    meta_path = parquet_path.with_suffix('.meta.json')
+    data.attrs = _load_attrs_meta(meta_path)
+    return data
+
+
+# ============================================================================
+# User-Facing Save Helper
+# ============================================================================
+
+def _save_dataframe(data: pd.DataFrame, file_path: str) -> None:
+    """
+    Save a DataFrame to a file, inferring format from extension.
+
+    .pkl / .pickle  -> pickle
+    anything else   -> parquet (default)
+    """
+    path = Path(file_path)
+    if path.suffix.lower() in ('.pkl', '.pickle'):
+        data.to_pickle(path)
+    else:
+        _save_parquet(data, path)
 
 
 # ============================================================================
@@ -30,7 +94,7 @@ def _get_cache_file_path(source: str, pivot: bool) -> Path:
     """Generate cache file path for given parameters."""
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f'{source}_{pivot}.pkl'
+    return cache_dir / f'{source}_{pivot}.parquet'
 
 
 def _get_cache_age_days(cache_file: Path) -> Optional[float]:
@@ -55,7 +119,7 @@ def _load_cached_data(source: str, pivot: bool) -> Optional[pd.DataFrame]:
     cache_file = _get_cache_file_path(source, pivot)
     if cache_file.exists():
         try:
-            data = pd.read_pickle(cache_file)
+            data = _load_parquet(cache_file)
             age = _get_cache_age_days(cache_file)
             print(f"Loaded {source} from cache ({age:.1f} days old)")
             return data
@@ -66,10 +130,10 @@ def _load_cached_data(source: str, pivot: bool) -> Optional[pd.DataFrame]:
 
 
 def _save_cached_data(data: pd.DataFrame, source: str, pivot: bool) -> None:
-    """Save data to cache."""
+    """Save data to cache as parquet."""
     cache_file = _get_cache_file_path(source, pivot)
     try:
-        data.to_pickle(cache_file)
+        _save_parquet(data, cache_file)
     except Exception as e:
         print(f"Warning: Could not save cache for {source}: {e}")
 
@@ -106,21 +170,23 @@ def clear_macrodata_cache(source: Optional[str] = None) -> None:
         return
 
     if source:
-        # Clear specific source
-        for cache_file in cache_dir.glob(f'{source}_*.pkl'):
-            try:
-                cache_file.unlink()
-                print(f"Cleared cache: {cache_file.name}")
-            except Exception as e:
-                print(f"Error deleting {cache_file.name}: {e}")
+        # Clear specific source (parquet + meta + legacy pkl)
+        for pattern in [f'{source}_*.parquet', f'{source}_*.meta.json', f'{source}_*.pkl']:
+            for cache_file in cache_dir.glob(pattern):
+                try:
+                    cache_file.unlink()
+                    print(f"Cleared cache: {cache_file.name}")
+                except Exception as e:
+                    print(f"Error deleting {cache_file.name}: {e}")
     else:
-        # Clear all caches
-        for cache_file in cache_dir.glob('*.pkl'):
-            try:
-                cache_file.unlink()
-                print(f"Cleared cache: {cache_file.name}")
-            except Exception as e:
-                print(f"Error deleting {cache_file.name}: {e}")
+        # Clear all caches (parquet + meta + legacy pkl)
+        for pattern in ['*.parquet', '*.meta.json', '*.pkl']:
+            for cache_file in cache_dir.glob(pattern):
+                try:
+                    cache_file.unlink()
+                    print(f"Cleared cache: {cache_file.name}")
+                except Exception as e:
+                    print(f"Error deleting {cache_file.name}: {e}")
         print("All cached data cleared.")
 
 
