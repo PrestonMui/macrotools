@@ -2,6 +2,17 @@
 
 ## Version 0
 
+### Version 0.3.1
+- Added `freq` parameter to `pull_data()` — supports `'M'`, `'Q'`, `'A'`, `'S'`, and `'all'` (unpivoted long-format)
+- Added `columns` parameter to `pull_data()` to filter specific series
+- `pull_bls_series()` now supports quarterly, annual, and semiannual series with auto-frequency detection; raises `ValueError` on mixed frequencies
+- Switched default cache format from pickle to feather (parquet for `freq='all'`); existing caches will be re-pulled automatically
+- Streamlined credential storage: replaced per-credential functions (`store_email`, `store_fred_api_key`, etc.) with generic `store_credential(name, value)` and `get_stored_credential(name)` **(breaking change)**
+- Added environment variable support for email (`MACROTOOLS_EMAIL`)
+- Credential storage prompt now tells users where credentials are saved and that they are stored as plain text
+- Set file permissions (0o600) on credentials file on Unix systems
+- Updated README with full documentation of all features
+
 ### Version 0.3.0
 - Major refactor of `tsgraph()` for readability; series input now uses a unified parameter format (see docstring)
 - Added recession shading via `xaxis={'shading': 'nber'}` or custom date ranges
