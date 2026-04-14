@@ -39,7 +39,36 @@ plt.show()
 
 ### Data access
 
-`pull_data(source)` downloads and caches full flat files. `pull_bls_series()` extracts individual series by code.
+**`pull_data(source, freq, columns)`** downloads and caches full flat files from BLS and other sources. BLS sources support a `freq` parameter (`'M'`, `'Q'`, `'A'`, `'S'`, or `'all'` for unpivoted long-format data) and a `columns` parameter to select specific series.
+
+```python
+# Pull monthly household survey data
+data = mt.pull_data('ln')
+
+# Pull only specific series
+data = mt.pull_data('ln', columns=['LNS12000000', 'LNS14000000'])
+
+# Pull quarterly data
+data = mt.pull_data('ln', freq='Q')
+
+# Pull raw long-format data with all frequencies
+data = mt.pull_data('ln', freq='all')
+```
+
+**`pull_bls_series(series_list)`** extracts individual series by code, auto-detecting the frequency from the series IDs. Supports monthly, quarterly, annual, and semiannual series. All series must share the same frequency.
+
+```python
+data = mt.pull_bls_series(['LNS12000000', 'CES0000000001'])
+```
+
+**`search_bls_series(source, query)`** fuzzy-searches BLS series catalogs to find series IDs.
+
+```python
+mt.search_bls_series('ln', 'prime age employment')
+mt.search_bls_series('cu', 'shelter', sa=True)  # seasonally adjusted only
+```
+
+**`get_series_list(source)`** returns the full series catalog for a BLS source as a DataFrame.
 
 Supported sources:
 
@@ -47,6 +76,7 @@ Supported sources:
 |--------|-------------|
 | `ln` | Household survey (CPS) labor force statistics |
 | `ce` | Establishment survey (CES) statistics |
+| `ci` | Employment Cost Index (ECI) |
 | `jt` | Job Openings and Labor Turnover Survey (JOLTS) |
 | `cu` | CPI — All Urban Consumers |
 | `pc` | PPI — Industry Data |
@@ -68,21 +98,28 @@ With the optional `fredapi` dependency, `alfred_as_reported()` pulls historical 
 
 ### Graphing
 
-`tsgraph()` wraps matplotlib with EA house styling (colors, fonts, layout). It supports:
+`tsgraph()` wraps matplotlib with EA house styling (colors, fonts, layout). Pass data as a Series, DataFrame, or list of dicts. Formatting is controlled via separate `xaxis`, `yaxis`, `title`, `legend`, and `footnote` dicts — see `help(mt.tsgraph)` for the full list of options.
+
+Features:
 
 - Single and multi-series plots
-- Dual y-axes
+- Dual y-axes (`axis='right'` on individual series)
 - Customizable axis limits, tick formatting, labels, and legends
 - Percentage and decimal tick formats
-- Subtitles, shading, and reference lines
-- Saving directly to PNG
-
-Pass data as a Series, DataFrame, or dict of series. Formatting is controlled via the `format_info` dict — see `help(mt.tsgraph)` for the full list of options.
+- Titles, subtitles, and footnotes
+- NBER recession shading or custom shading regions
+- Horizontal reference lines with callouts (`hline`)
+- Data callouts on individual series (annotate specific points with values)
+- Saving directly to file (`save_path`)
 
 ### Time series utilities
 
 - **`cagr(data, lag, ma)`** — Compounded annual growth rates with optional moving-average smoothing.
 - **`rebase(data, baseperiod, basevalue)`** — Reindex series to a base period (single date or date range).
+
+### Cache management
+
+Data is cached locally in `~/.macrodata_cache/` with a 7-day TTL. Use `mt.clear_macrodata_cache()` to clear all cached data, or `mt.clear_macrodata_cache(source)` to clear a specific source.
 
 ## Credential setup
 
@@ -92,7 +129,7 @@ Pass data as a Series, DataFrame, or dict of series. Formatting is controlled vi
 
 **FRED API key:** Required for `alfred_as_reported()`. Register at [FRED](https://fred.stlouisfed.org/docs/api/api_key.html), then `mt.store_credential('fred_api_key', 'your-key')` or set the `FRED_API_KEY` environment variable.
 
-Credentials are resolved in order: function argument > stored file > environment variable > interactive prompt. Credentials are stored as plain text in `~/.macrodata_credentials/credentials.json`. For sensitive keys, prefer environment variables instead of storing to disk. Cached data lives in `~/.macrodata_cache/` with a 7-day TTL.
+Credentials are resolved in order: function argument > stored file > environment variable > interactive prompt. Credentials are stored as plain text in `~/.macrodata_credentials/credentials.json`. For sensitive keys, prefer environment variables instead of storing to disk.
 
 ## Examples
 
