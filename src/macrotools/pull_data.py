@@ -71,7 +71,7 @@ def get_series_list(source):
     return pd.read_csv(catalog_path)
 
 @timer
-def pull_data(source, email = None, pivot = True, save_file = None, force_refresh=False, cache=True):
+def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False, cache=True, columns=None):
 
     """
     Pull full data files from BLS and BEA.
@@ -104,13 +104,25 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         'kc-mfg': Kansas City Fed Manufacturing Survey
         'kc-svc': Kansas City Fed Services Survey
 
+    freq : str, default None
+        Frequency of data to return. Only applies to BLS flat file sources.
+        'M': Monthly data
+        'Q': Quarterly data
+        'A': Annual data
+        'S': Semiannual data
+        'all': Return unpivoted long-format data with all frequencies.
+        Note: M13 (annual average) observations are always dropped.
+        Non-BLS sources ignore this parameter.
+        If None, defaults to the source's natural frequency:
+        'Q' for 'ci', 'A' for 'cx' and 'tu', 'M' for all others.
+
     email : str
         Provide an email address to pull files from the BLS.
 
     save_file : str
         Provide a filepath to save the pulled data.
         Format is inferred from the extension:
-        .pkl/.pickle -> pickle; anything else -> parquet (default).
+        .pkl/.pickle -> pickle; .parquet -> parquet; anything else -> feather (default).
 
     cache : bool, default=True
         If True, use cached data if available (up to 7 days old).
@@ -118,6 +130,9 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
     force_refresh : bool, default=False
         If True, ignore cache and pull fresh data.
     """
+
+    if isinstance(columns, str):
+        columns = [columns]
 
     valid_sources = [
         'ce',
@@ -177,18 +192,45 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             """
         )
 
+    # Apply source-specific default frequencies
+    if freq is None:
+        source_default_freqs = {'ci': 'Q', 'cx': 'A', 'tu': 'A'}
+        freq = source_default_freqs.get(source, 'M')
+
+    # Determine cache key: freq for BLS flat file sources, 'default' for others
+    bls_sources = ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu']
+    valid_freqs = {'M', 'Q', 'A', 'S', 'all'}
+    if source in bls_sources:
+        if freq not in valid_freqs:
+            raise ValueError(f"Invalid freq: '{freq}'. Must be one of {valid_freqs}.")
+        cache_freq = freq
+    else:
+        cache_freq = 'default'
+
     # Check cache first
-    cache_file = _get_cache_file_path(source, pivot)
+    cache_file = _get_cache_file_path(source, cache_freq)
     if cache and not force_refresh and not _should_refresh_cache(cache_file):
-        cached_data = _load_cached_data(source, pivot)
+        cached_data = _load_cached_data(source, cache_freq)
         if cached_data is not None:
+            if columns is not None:
+                if freq == 'all':
+                    available = set(cached_data['series_id'].unique())
+                    missing = [c for c in columns if c not in available]
+                else:
+                    missing = [c for c in columns if c not in cached_data.columns]
+                if missing:
+                    raise ValueError(f"Series not found in '{source}': {missing}")
+                if freq == 'all':
+                    cached_data = cached_data[cached_data['series_id'].isin(columns)]
+                else:
+                    cached_data = cached_data[columns]
             if save_file:
                 _save_dataframe(cached_data, save_file)
             return cached_data
 
-    print(f"Pulling data from source: {source}")
+    # If data not cached, pull from source
+    print(f"Pulling {source} data from source")
 
-    # Format flatfile -- BLS Sources
     if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu']:
 
         email = _get_email_for_bls(email)
@@ -221,44 +263,86 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data['series_id'] = data['series_id'].str.strip()
         data['value'] = pd.to_numeric(data['value'], errors='coerce')
 
-        # Dates
+        # Clean periods and classify frequency
+        data['period'] = data['period'].str.strip()
+
         data['frequency'] = data['period'].apply(
-            lambda x: 'A' if (x=='M13') or x[0]=='A' else ('Q' if x[0]=='Q' else 'M')
+            lambda x: 'A' if (x == 'M13') or x[0] == 'A'
+            else ('Q' if x[0] == 'Q'
+            else ('S' if x[0] == 'S'
+            else 'M'))
         )
-        data['month'] = data['period'].apply(lambda x: pd.NA if (x=='M13') or (x=='A01') or (x[0]=='Q') else int(x[1:]))
-        data['quarter'] = data['period'].apply(lambda x: pd.NA if (x[0]=='M') or (x=='A01') else int(x[2:]))
+        # Pivot by frequency
+        if freq == 'all':
+            data['period'] = data['period'].str[1:].astype(int)
 
-        # Pivot Data
-        if pivot:
-            print(f"Converting File to Pivot Table. Be aware that this will drop footnotes and only keep monthly data. If you want long data, set pivot=False")
 
-            if source in ['ce', 'ln', 'jt', 'cu', 'pc', 'wp', 'ei']:
-                data = data.loc[data['frequency']=='M', ['series_id','value','year','month']]
-                data['date'] = pd.to_datetime(data['year'].astype(str) + '-' + data['month'].astype(str), format='%Y-%m')
-                data = (data
-                        .drop(['month','year'], axis=1)
-                        .pivot_table(values = 'value', index = 'date', columns = 'series_id')
+        else:
+            # Drop M13 annual averages for pivoted output
+            data = data[data['period'] != 'M13']
+            data = data.loc[data['frequency'] == freq].copy()
+
+            if data.empty:
+                raise ValueError(
+                    f"No '{freq}' frequency data found in source '{source}'."
+                )
+
+            data['month'] = data['period'].apply(
+                lambda x: pd.NA if x[0] in ('A', 'Q', 'S') else int(x[1:]))
+            data['quarter'] = data['period'].apply(
+                lambda x: int(x[2:]) if x[0] == 'Q' else pd.NA)
+
+            if freq == 'M':
+                data['date'] = pd.to_datetime(
+                    data['year'].astype(str) + '-' + data['month'].astype(str))
+                data = (data[['series_id', 'value', 'date']]
+                        .pivot_table(values='value', index='date', columns='series_id')
                         .asfreq('MS'))
 
-            if source in ['ci']:
-                data = data[['series_id','value','year','quarter']]
-                data['period'] = pd.to_datetime(data['year'].astype(str) + '-' + (data['quarter'] * 3).astype(str) + '-01')
-                data = (data
-                        .drop(['year','quarter'], axis=1)
-                        .pivot_table(values = 'value', index = 'period', columns = 'series_id')
-                        .asfreq('QS-MAR'))
-                
-            if source in ['cx', 'tu']:
-                data = data[['series_id', 'value', 'year']]
+            elif freq == 'Q':
+                if source == 'ci':
+                    # ECI convention: Q01 -> March (quarter-end month)
+                    data['date'] = pd.to_datetime(
+                        data['year'].astype(str) + '-' + (data['quarter'] * 3).astype(str) + '-01')
+                    asfreq_rule = 'QS-MAR'
+                else:
+                    # Standard: Q01 -> January (quarter-start month)
+                    data['date'] = pd.to_datetime(
+                        data['year'].astype(str) + '-' + (data['quarter'] * 3 - 2).astype(str) + '-01')
+                    asfreq_rule = 'QS'
+                data = (data[['series_id', 'value', 'date']]
+                        .pivot_table(values='value', index='date', columns='series_id')
+                        .asfreq(asfreq_rule))
+
+            elif freq == 'A':
                 data['date'] = pd.to_datetime(data['year'], format='%Y')
-                data = (data
-                        .set_index('date')
-                        .drop('year', axis=1)
-                        .pivot_table(values = 'value', index = 'date', columns = 'series_id')
+                data = (data[['series_id', 'value', 'date']]
+                        .pivot_table(values='value', index='date', columns='series_id')
                         .asfreq('YS'))
 
+            elif freq == 'S':
+                data['half'] = data['period'].str[1:].astype(int)
+                data['date'] = pd.to_datetime(
+                    data['year'].astype(str) + '-' + (data['half'] * 6 - 5).astype(str) + '-01')
+                data = (data[['series_id', 'value', 'date']]
+                        .pivot_table(values='value', index='date', columns='series_id'))
+
+            data.index.name = 'date'
+
+        if cache: _save_cached_data(data, source, cache_freq)
+        if columns is not None:
+            if freq == 'all':
+                available = set(data['series_id'].unique())
+                missing = [c for c in columns if c not in available]
+                if missing:
+                    raise ValueError(f"Series not found in '{source}': {missing}")
+                data = data[data['series_id'].isin(columns)]
+            else:
+                missing = [c for c in columns if c not in data.columns]
+                if missing:
+                    raise ValueError(f"Series not found in '{source}': {missing}")
+                data = data[columns]
         if save_file: _save_dataframe(data, save_file)
-        if cache: _save_cached_data(data, source, pivot)
         return data
 
     if source=='stclaims':
@@ -346,7 +430,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         stclaims.attrs['date_created'] = pd.Timestamp.now().date()
 
         if save_file: _save_dataframe(stclaims, save_file)
-        if cache: _save_cached_data(stclaims, source, pivot)
+        if cache: _save_cached_data(stclaims, source, cache_freq)
         return stclaims
     
     if source=='nipa-pce':
@@ -385,7 +469,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
         data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
         data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='ny-mfg':
@@ -397,7 +481,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
         data.set_index('date', inplace=True)
 
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='ny-svc':
@@ -409,7 +493,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
         data.set_index('date', inplace=True)
 
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='philly-mfg':
@@ -423,7 +507,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data.drop(columns='DATE', axis=1, inplace=True)
         data.set_index('date', inplace=True)
 
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
 
     if source=='philly-nonmfg':
@@ -431,7 +515,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/NBOS/nboshistory.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='richmond-mfg':
@@ -439,7 +523,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/manufacturing/data/mfg_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='richmond-nonmfg':
@@ -447,7 +531,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/non-manufacturing/data/nmf_historicaldata.xlsx'
         data = pd.read_excel(url)
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='dallas-mfg':
@@ -459,7 +543,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
                 .dropna(subset=['date'])
                 .set_index('date')
         )
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
 
     if source=='dallas-svc':
@@ -467,7 +551,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['date'], format='%b-%y')
         data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
 
     if source=='dallas-retail':
@@ -479,7 +563,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
             .drop(columns='Date', axis=1)
             .set_index('date')
         )
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
     
     if source=='kc-mfg':
@@ -495,7 +579,7 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data = data.drop([0,1, 16, 17, 32, 33, 48, 49, 64, 65])
 
         data = data.set_index('Unnamed: 0').transpose()
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
 
     if source=='kc-svc':
@@ -511,8 +595,45 @@ def pull_data(source, email = None, pivot = True, save_file = None, force_refres
         data = data.drop([0,1, 13, 14, 15, 27, 28, 29, 43, 44, 45, 57, 58, 59])
 
         data = data.set_index('Unnamed: 0').transpose()
-        if cache: _save_cached_data(data, source, pivot)
+        if cache: _save_cached_data(data, source, cache_freq)
         return data
+
+def _detect_series_freq(source: str, series_ids: list) -> str:
+    """
+    Detect the frequency of BLS series from the series ID suffix.
+
+    Returns one of: 'M', 'Q', 'A'
+    Raises ValueError if series have mixed frequencies.
+    """
+    # Sources with fixed frequencies
+    if source == 'ci':
+        return 'Q'
+    if source in ('cx', 'tu'):
+        return 'A'
+
+    # 'ln': trailing 'Q' = quarterly, trailing 'A' = annual, else monthly
+    # 'cu': 4th char 'S' (CUUS) = semiannual, 'R' (CUUR/CUSR) = monthly
+    # All other BLS sources (ce, jt, pc, wp, ei) are monthly.
+    freqs = set()
+    for sid in series_ids:
+        if source == 'ln' and sid.endswith('Q'):
+            freqs.add('Q')
+        elif source == 'ln' and sid.endswith('A'):
+            freqs.add('A')
+        elif source == 'cu' and sid[3] == 'S':
+            freqs.add('S')
+        else:
+            freqs.add('M')
+
+    if len(freqs) > 1:
+        raise ValueError(
+            f"Mixed frequencies detected: {freqs}. "
+            f"All series must have the same frequency. "
+            f"Separate series by frequency into different calls."
+        )
+
+    return freqs.pop()
+
 
 def pull_bls_series(series_list: Union[str, List],
     date_range = None,
@@ -536,7 +657,7 @@ def pull_bls_series(series_list: Union[str, List],
 
     Optional: save_file - save pulled data to file.
         Format is inferred from extension: .pkl/.pickle -> pickle;
-        anything else -> parquet (default). e.g. 'data.parquet'
+        .parquet -> parquet; anything else -> feather (default). e.g. 'data.feather'
 
     source : str, default 'flatfiles'
         Data source method.
@@ -550,8 +671,7 @@ def pull_bls_series(series_list: Union[str, List],
         https://data.bls.gov/registrationEngine/
 
     Returns a pivot table with a DateTimeIndex and the series_list as columns.
-
-    WARNING: Only use this for monthly data series at this time.
+    All series must share the same frequency; raises ValueError if mixed.
     """
 
     if isinstance(series_list, str):
@@ -566,12 +686,13 @@ def pull_bls_series(series_list: Union[str, List],
             'ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu'
         ]
 
-        data_list = []
+        # Validate prefixes and group series by BLS source
+        source_groups = {}
         for series in series_list:
-
-            if series[0:2].lower() not in valid_sources:
+            prefix = series[0:2].lower()
+            if prefix not in valid_sources:
                 raise ValueError(
-                f"Invalid series prefix: '{series[0:2].lower()}'. "
+                f"Invalid series prefix: '{prefix}'. "
                 """
                 Please choose a series from one of the following BLS sources:
                 'ce': Establishment Survey
@@ -586,12 +707,26 @@ def pull_bls_series(series_list: Union[str, List],
                 'tu': Time Use Survey
                 """
             )
+            source_groups.setdefault(prefix, []).append(series)
 
+        # Detect frequency for each source group and ensure all match
+        detected_freq = None
+        for bls_source, group_series in source_groups.items():
+            group_freq = _detect_series_freq(bls_source, group_series)
+            if detected_freq is None:
+                detected_freq = group_freq
+            elif group_freq != detected_freq:
+                raise ValueError(
+                    f"Mixed frequencies across sources: '{detected_freq}' and '{group_freq}'. "
+                    f"All series must have the same frequency."
+                )
+
+        data_list = []
+        for bls_source, group_series in source_groups.items():
+            df = pull_data(bls_source, freq=detected_freq, force_refresh=force_refresh, columns=group_series)
             if date_range:
-                individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh).loc[date_range[0]:date_range[1]][series]
-            else:
-                individual_series = pull_data(series[0:2].lower(), force_refresh=force_refresh)[series]
-            data_list.append(individual_series)
+                df = df.loc[date_range[0]:date_range[1]]
+            data_list.append(df)
 
         data = pd.concat(data_list, axis=1)
 
@@ -658,19 +793,42 @@ def pull_bls_series(series_list: Union[str, List],
         raw = pd.DataFrame(all_records)
         raw['value'] = pd.to_numeric(raw['value'], errors='coerce')
 
-        # Filter to monthly observations (M01-M12, exclude M13 annual averages)
-        monthly = raw[raw['period'].str.match(r'^M(0[1-9]|1[0-2])$')].copy()
-        if monthly.empty:
-            raise ValueError(
-                "No monthly data found in API response. "
-                "pull_bls_series currently only supports monthly series."
-            )
-        monthly['date'] = pd.to_datetime(
-            monthly['year'].astype(str) + '-' + monthly['period'].str[1:].astype(str),
-            format='%Y-%m'
-        )
+        # Drop M13 annual averages
+        raw = raw[raw['period'] != 'M13']
 
-        data = monthly.pivot_table(values='value', index='date', columns='series_id').sort_index()
+        # Detect frequency from API response
+        raw['frequency'] = raw['period'].apply(
+            lambda x: 'A' if x[0] == 'A'
+            else ('Q' if x[0] == 'Q'
+            else ('S' if x[0] == 'S'
+            else 'M'))
+        )
+        api_freqs = raw['frequency'].unique()
+        if len(api_freqs) > 1:
+            raise ValueError(
+                f"Mixed frequencies in API response: {set(api_freqs)}. "
+                f"All series must have the same frequency."
+            )
+        api_freq = api_freqs[0]
+
+        if api_freq == 'M':
+            raw['date'] = pd.to_datetime(
+                raw['year'].astype(str) + '-' + raw['period'].str[1:].astype(str),
+                format='%Y-%m'
+            )
+        elif api_freq == 'Q':
+            raw['quarter'] = raw['period'].str[2:].astype(int)
+            raw['date'] = pd.to_datetime(
+                raw['year'].astype(str) + '-' + (raw['quarter'] * 3 - 2).astype(str) + '-01')
+        elif api_freq == 'A':
+            raw['date'] = pd.to_datetime(raw['year'], format='%Y')
+        elif api_freq == 'S':
+            raw['half'] = raw['period'].str[1:].astype(int)
+            raw['date'] = pd.to_datetime(
+                raw['year'].astype(str) + '-' + (raw['half'] * 6 - 5).astype(str) + '-01')
+
+        data = raw.pivot_table(values='value', index='date', columns='series_id').sort_index()
+        data.index.name = 'date'
         data.columns.name = None
 
         if date_range:

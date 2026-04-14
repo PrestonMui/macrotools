@@ -18,5 +18,8 @@ MacroTools is a public Python package (PyPI: `macrotools`) for pulling, caching,
 - Plan, explain and refine before suggesting changes.
 - Prefer editing existing files over creating new ones.
 
+## Known issues
+- `pull_data('cu', freq='S')` breaks: CU semiannual data has an `S03` period (annual average) that the `freq='S'` pivot code doesn't handle — it computes month 13, which is invalid. Need to drop `S03` rows (like `M13` is dropped for monthly).
+
 ## Current Context
 - Preparing for v1.0 release

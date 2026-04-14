@@ -45,18 +45,30 @@ def _load_attrs_meta(meta_path: Path) -> dict:
         return {}
 
 
-def _save_parquet(data: pd.DataFrame, parquet_path: Path) -> None:
-    """Save a DataFrame as parquet + companion .meta.json for attrs."""
-    data.to_parquet(parquet_path)
-    meta_path = parquet_path.with_suffix('.meta.json')
-    _save_attrs_meta(meta_path, data.attrs)
+def _save_cache_file(data: pd.DataFrame, file_path: Path) -> None:
+    """Save a DataFrame as feather + companion .meta.json for attrs."""
+    index_name = data.index.name
+    data.reset_index().to_feather(file_path)
+    meta_path = file_path.with_suffix('.meta.json')
+    attrs = dict(data.attrs)
+    if index_name:
+        attrs['__index_name__'] = index_name
+    _save_attrs_meta(meta_path, attrs)
 
 
-def _load_parquet(parquet_path: Path) -> pd.DataFrame:
-    """Load a DataFrame from parquet and restore attrs from companion .meta.json."""
-    data = pd.read_parquet(parquet_path)
-    meta_path = parquet_path.with_suffix('.meta.json')
-    data.attrs = _load_attrs_meta(meta_path)
+def _load_cache_file(file_path: Path, columns=None) -> pd.DataFrame:
+    """Load a DataFrame from feather and restore attrs from companion .meta.json."""
+    meta_path = file_path.with_suffix('.meta.json')
+    meta = _load_attrs_meta(meta_path)
+    index_name = meta.pop('__index_name__', None)
+    # Always include the index column in the read so we can restore it
+    read_columns = columns
+    if columns is not None and index_name and index_name not in columns:
+        read_columns = [index_name] + list(columns)
+    data = pd.read_feather(file_path, columns=read_columns)
+    if index_name and index_name in data.columns:
+        data = data.set_index(index_name)
+    data.attrs = meta
     return data
 
 
@@ -69,13 +81,16 @@ def _save_dataframe(data: pd.DataFrame, file_path: str) -> None:
     Save a DataFrame to a file, inferring format from extension.
 
     .pkl / .pickle  -> pickle
-    anything else   -> parquet (default)
+    .parquet        -> parquet
+    anything else   -> feather (default)
     """
     path = Path(file_path)
     if path.suffix.lower() in ('.pkl', '.pickle'):
         data.to_pickle(path)
+    elif path.suffix.lower() == '.parquet':
+        data.to_parquet(path)
     else:
-        _save_parquet(data, path)
+        data.reset_index().to_feather(path)
 
 
 # ============================================================================
@@ -90,11 +105,12 @@ def _get_cache_dir():
     return Path.home() / '.macrodata_cache'
 
 
-def _get_cache_file_path(source: str, pivot: bool) -> Path:
+def _get_cache_file_path(source: str, freq: str) -> Path:
     """Generate cache file path for given parameters."""
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f'{source}_{pivot}.parquet'
+    ext = '.parquet' if freq == 'all' else '.feather'
+    return cache_dir / f'{source}_{freq}{ext}'
 
 
 def _get_cache_age_days(cache_file: Path) -> Optional[float]:
@@ -114,12 +130,15 @@ def _should_refresh_cache(cache_file: Path, ttl_days: int = 7) -> bool:
     return age >= ttl_days
 
 
-def _load_cached_data(source: str, pivot: bool) -> Optional[pd.DataFrame]:
+def _load_cached_data(source: str, freq: str, columns=None) -> Optional[pd.DataFrame]:
     """Load data from cache if it exists and is valid."""
-    cache_file = _get_cache_file_path(source, pivot)
+    cache_file = _get_cache_file_path(source, freq)
     if cache_file.exists():
         try:
-            data = _load_parquet(cache_file)
+            if freq == 'all':
+                data = pd.read_parquet(cache_file, columns=columns)
+            else:
+                data = _load_cache_file(cache_file, columns=columns)
             age = _get_cache_age_days(cache_file)
             print(f"Loaded {source} from cache ({age:.1f} days old)")
             return data
@@ -129,27 +148,30 @@ def _load_cached_data(source: str, pivot: bool) -> Optional[pd.DataFrame]:
     return None
 
 
-def _save_cached_data(data: pd.DataFrame, source: str, pivot: bool) -> None:
-    """Save data to cache as parquet."""
-    cache_file = _get_cache_file_path(source, pivot)
+def _save_cached_data(data: pd.DataFrame, source: str, freq: str) -> None:
+    """Save data to cache."""
+    cache_file = _get_cache_file_path(source, freq)
     try:
-        _save_parquet(data, cache_file)
+        if freq == 'all':
+            data.to_parquet(cache_file)
+        else:
+            _save_cache_file(data, cache_file)
     except Exception as e:
         print(f"Warning: Could not save cache for {source}: {e}")
 
 
-def get_cache_age(source: str, pivot: bool = True) -> Optional[float]:
+def get_cache_age(source: str, freq: str = 'M') -> Optional[float]:
     """
     Get age of cached data in days.
 
     Parameters:
         source : str; Data source (e.g., 'ce', 'nipa-pce')
-        pivot : bool; Whether data is pivoted
+        freq : str; Frequency key (e.g., 'M', 'Q', 'A', 'all', 'default')
 
     Returns:
         float or None; Age in days if cached, None if not cached
     """
-    cache_file = _get_cache_file_path(source, pivot)
+    cache_file = _get_cache_file_path(source, freq)
     return _get_cache_age_days(cache_file)
 
 
@@ -171,7 +193,7 @@ def clear_macrodata_cache(source: Optional[str] = None) -> None:
 
     if source:
         # Clear specific source (parquet + meta + legacy pkl)
-        for pattern in [f'{source}_*.parquet', f'{source}_*.meta.json', f'{source}_*.pkl']:
+        for pattern in [f'{source}_*.feather', f'{source}_*.meta.json', f'{source}_*.parquet', f'{source}_*.pkl']:
             for cache_file in cache_dir.glob(pattern):
                 try:
                     cache_file.unlink()
@@ -179,8 +201,8 @@ def clear_macrodata_cache(source: Optional[str] = None) -> None:
                 except Exception as e:
                     print(f"Error deleting {cache_file.name}: {e}")
     else:
-        # Clear all caches (parquet + meta + legacy pkl)
-        for pattern in ['*.parquet', '*.meta.json', '*.pkl']:
+        # Clear all caches (feather + meta + legacy parquet/pkl)
+        for pattern in ['*.feather', '*.meta.json', '*.parquet', '*.pkl']:
             for cache_file in cache_dir.glob(pattern):
                 try:
                     cache_file.unlink()
