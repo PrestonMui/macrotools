@@ -10,9 +10,7 @@ from .storage import (
     _load_cached_data,
     _save_cached_data,
     _save_dataframe,
-    _get_email_for_bls,
-    _get_fred_api_key,
-    _get_bls_api_key,
+    _resolve_credential,
 )
 
 def get_series_list(source):
@@ -233,7 +231,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
 
     if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu']:
 
-        email = _get_email_for_bls(email)
+        email = _resolve_credential('email', email)
 
         flat_file_name = {
             'ce': 'ce.data.0.AllCESSeries',
@@ -732,7 +730,7 @@ def pull_bls_series(series_list: Union[str, List],
 
     elif source == 'api':
 
-        api_key = _get_bls_api_key(api_key)
+        api_key = _resolve_credential('bls_api_key', api_key)
 
         # Determine year range
         if date_range:
@@ -1041,7 +1039,7 @@ def alfred_as_reported(
         )
 
     # Get API key
-    api_key = _get_fred_api_key(api_key)
+    api_key = _resolve_credential('fred_api_key', api_key)
 
     # Initialize Fred client
     fred = Fred(api_key=api_key)

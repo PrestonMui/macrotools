@@ -247,212 +247,123 @@ def _save_credentials(credentials: Dict) -> None:
     try:
         with open(cred_file, 'w') as f:
             json.dump(credentials, f, indent=2)
+        try:
+            os.chmod(cred_file, 0o600)
+        except OSError:
+            pass  # Windows doesn't support Unix file permissions
     except Exception as e:
         print(f"Warning: Could not save credentials: {e}")
 
 
-def store_email(email: str) -> None:
-    """
-    Store an email address for BLS data pulls.
+_CREDENTIAL_REGISTRY = {
+    "email": {
+        "json_key": "email",
+        "env_var": "MACROTOOLS_EMAIL",
+        "prompt_message": "Please enter your email address for BLS data pulls: ",
+        "store_success_message": "Email stored in {path}",
+        "help_text": None,
+    },
+    "fred_api_key": {
+        "json_key": "fred_api_key",
+        "env_var": "FRED_API_KEY",
+        "prompt_message": "Please enter your FRED API key: ",
+        "store_success_message": "FRED API key stored in {path}",
+        "help_text": "FRED API key is required. Get one free at: https://fred.stlouisfed.org/docs/api/api_key.html",
+    },
+    "bls_api_key": {
+        "json_key": "bls_api_key",
+        "env_var": "BLS_API_KEY",
+        "prompt_message": "Please enter your BLS API key: ",
+        "store_success_message": "BLS API key stored in {path}",
+        "help_text": "BLS API key is required. Register free at: https://data.bls.gov/registrationEngine/",
+    },
+}
 
-    Parameters:
-    -----------
-    email : str
-        Email address to store
+
+def _validate_credential_name(name: str) -> dict:
+    """Validate credential name and return its registry entry."""
+    if name not in _CREDENTIAL_REGISTRY:
+        raise ValueError(
+            f"Unknown credential: '{name}'. "
+            f"Valid names: {', '.join(sorted(_CREDENTIAL_REGISTRY))}"
+        )
+    return _CREDENTIAL_REGISTRY[name]
+
+
+def store_credential(name: str, value: str) -> None:
     """
+    Store a credential by name.
+
+    Parameters
+    ----------
+    name : str
+        Credential name. One of: 'email', 'fred_api_key', 'bls_api_key'.
+    value : str
+        The credential value to store.
+    """
+    config = _validate_credential_name(name)
     credentials = _load_credentials()
-    credentials['email'] = email
+    credentials[config["json_key"]] = value
     _save_credentials(credentials)
-    print(f"Email stored: {email}")
+    print(config["store_success_message"].format(path=_get_credentials_file_path()))
 
 
-def get_stored_email() -> Optional[str]:
+def get_stored_credential(name: str) -> Optional[str]:
     """
-    Get the stored email address.
+    Get a stored credential by name.
 
-    Returns:
-    --------
+    Parameters
+    ----------
+    name : str
+        Credential name. One of: 'email', 'fred_api_key', 'bls_api_key'.
+
+    Returns
+    -------
     str or None
-        The stored email address, or None if not set
+        The stored value, or None if not set.
     """
+    config = _validate_credential_name(name)
     credentials = _load_credentials()
-    return credentials.get('email')
+    return credentials.get(config["json_key"])
 
 
-def _get_email_for_bls(email: Optional[str] = None) -> str:
+def _resolve_credential(name: str, value: Optional[str] = None) -> str:
     """
-    Get email to use for BLS requests.
+    Resolve a credential using the priority chain:
+    argument > stored > environment variable > interactive prompt.
 
-    Priority:
-    1. If email is provided as argument, use it
-    2. If email is stored, use stored email
-    3. Otherwise, prompt user for email
+    Parameters
+    ----------
+    name : str
+        Credential name (must be a key in _CREDENTIAL_REGISTRY).
+    value : str, optional
+        Explicitly provided value (highest priority).
 
-    Parameters:
-    -----------
-    email : str, optional
-        Email address provided by user
-
-    Returns:
-    --------
+    Returns
+    -------
     str
-        Email address to use
+        The resolved credential value.
     """
-    if email:
-        return email
+    if value:
+        return value
 
-    stored_email = get_stored_email()
-    if stored_email:
-        return stored_email
+    stored = get_stored_credential(name)
+    if stored:
+        return stored
 
-    # Prompt user for email
-    email = input("No email provided or stored. Please enter your email address for BLS data pulls: ").strip()
-    if email:
-        # Ask if user wants to store it
-        store_choice = input(f"Would you like to store this email for future use? (y/n): ").strip().lower()
+    config = _CREDENTIAL_REGISTRY[name]
+    env_val = os.getenv(config["env_var"])
+    if env_val:
+        return env_val
+
+    # Interactive prompt
+    if config["help_text"]:
+        print(config["help_text"])
+    value = input(config["prompt_message"]).strip()
+    if value:
+        cred_path = _get_credentials_file_path()
+        store_choice = input(f"Credentials are stored as plain text in {cred_path}. Store for future use? (y/n): ").strip().lower()
         if store_choice == 'y':
-            store_email(email)
+            store_credential(name, value)
 
-    return email
-
-
-def store_fred_api_key(api_key: str) -> None:
-    """
-    Store a FRED API key for data pulls.
-
-    Parameters:
-    -----------
-    api_key : str
-        FRED API key to store
-    """
-    credentials = _load_credentials()
-    credentials['fred_api_key'] = api_key
-    _save_credentials(credentials)
-    print("FRED API key stored successfully")
-
-
-def get_stored_fred_api_key() -> Optional[str]:
-    """
-    Get the stored FRED API key.
-
-    Returns:
-    --------
-    str or None
-        The stored API key, or None if not set
-    """
-    credentials = _load_credentials()
-    return credentials.get('fred_api_key')
-
-
-def _get_fred_api_key(api_key: Optional[str] = None) -> str:
-    """
-    Get FRED API key to use for requests.
-
-    Priority:
-    1. If api_key is provided as argument, use it
-    2. If api_key is stored, use stored api_key
-    3. Check environment variable FRED_API_KEY
-    4. Otherwise, prompt user for api_key
-
-    Parameters:
-    -----------
-    api_key : str, optional
-        API key provided by user
-
-    Returns:
-    --------
-    str
-        API key to use
-    """
-    if api_key:
-        return api_key
-
-    stored_key = get_stored_fred_api_key()
-    if stored_key:
-        return stored_key
-
-    # Check environment variable
-    env_key = os.getenv('FRED_API_KEY')
-    if env_key:
-        return env_key
-
-    # Prompt user for API key
-    print("FRED API key is required. Get one free at: https://fred.stlouisfed.org/docs/api/api_key.html")
-    api_key = input("Please enter your FRED API key: ").strip()
-    if api_key:
-        store_choice = input("Would you like to store this API key for future use? (y/n): ").strip().lower()
-        if store_choice == 'y':
-            store_fred_api_key(api_key)
-
-    return api_key
-
-
-def store_bls_api_key(api_key: str) -> None:
-    """
-    Store a BLS API registration key for data pulls.
-
-    Parameters:
-    -----------
-    api_key : str
-        BLS API registration key to store
-    """
-    credentials = _load_credentials()
-    credentials['bls_api_key'] = api_key
-    _save_credentials(credentials)
-    print("BLS API key stored successfully")
-
-
-def get_stored_bls_api_key() -> Optional[str]:
-    """
-    Get the stored BLS API registration key.
-
-    Returns:
-    --------
-    str or None
-        The stored API key, or None if not set
-    """
-    credentials = _load_credentials()
-    return credentials.get('bls_api_key')
-
-
-def _get_bls_api_key(api_key: Optional[str] = None) -> str:
-    """
-    Get BLS API key to use for requests.
-
-    Priority:
-    1. If api_key is provided as argument, use it
-    2. If api_key is stored, use stored api_key
-    3. Check environment variable BLS_API_KEY
-    4. Otherwise, prompt user for api_key
-
-    Parameters:
-    -----------
-    api_key : str, optional
-        API key provided by user
-
-    Returns:
-    --------
-    str
-        API key to use
-    """
-    if api_key:
-        return api_key
-
-    stored_key = get_stored_bls_api_key()
-    if stored_key:
-        return stored_key
-
-    # Check environment variable
-    env_key = os.getenv('BLS_API_KEY')
-    if env_key:
-        return env_key
-
-    # Prompt user for API key
-    print("BLS API key is required. Register free at: https://data.bls.gov/registrationEngine/")
-    api_key = input("Please enter your BLS API key: ").strip()
-    if api_key:
-        store_choice = input("Would you like to store this API key for future use? (y/n): ").strip().lower()
-        if store_choice == 'y':
-            store_bls_api_key(api_key)
-
-    return api_key
+    return value

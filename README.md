@@ -86,11 +86,13 @@ Pass data as a Series, DataFrame, or dict of series. Formatting is controlled vi
 
 ## Credential setup
 
-**BLS email:** Required for BLS data. Set once with `mt.store_email('you@example.com')` or pass `email=` to `pull_data()`.
+**BLS email:** Required for BLS flat-file data pulls. Set once with `mt.store_credential('email', 'you@example.com')`, pass `email=` to `pull_data()`, or set the `MACROTOOLS_EMAIL` environment variable.
 
-**FRED API key:** Required for `alfred_as_reported()`. Register at [FRED](https://fred.stlouisfed.org/docs/api/api_key.html), then `mt.store_fred_api_key('your-key')` or set the `FRED_API_KEY` environment variable.
+**BLS API key:** Required for `pull_bls_series(source='api')`. Register at [BLS](https://data.bls.gov/registrationEngine/), then `mt.store_credential('bls_api_key', 'your-key')` or set the `BLS_API_KEY` environment variable.
 
-Credentials are stored in `~/.macrodata_credentials/credentials.json`. Cached data lives in `~/.macrodata_cache/` with a 7-day TTL.
+**FRED API key:** Required for `alfred_as_reported()`. Register at [FRED](https://fred.stlouisfed.org/docs/api/api_key.html), then `mt.store_credential('fred_api_key', 'your-key')` or set the `FRED_API_KEY` environment variable.
+
+Credentials are resolved in order: function argument > stored file > environment variable > interactive prompt. Credentials are stored as plain text in `~/.macrodata_credentials/credentials.json`. For sensitive keys, prefer environment variables instead of storing to disk. Cached data lives in `~/.macrodata_cache/` with a 7-day TTL.
 
 ## Examples
 

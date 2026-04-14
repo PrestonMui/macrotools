@@ -12,7 +12,7 @@ Usage:
     python scripts/generate_series_lists.py
 
 Requires a valid BLS email address (passed as argument or stored via
-macrotools.store_email()).
+macrotools.store_credential('email', ...)).
 """
 
 import sys
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 import pandas as pd
 import requests
-from macrotools.storage import _get_email_for_bls
+from macrotools.storage import _resolve_credential
 
 OUTPUT_DIR = Path(__file__).parent.parent / 'src' / 'macrotools' / 'data'
 
@@ -34,7 +34,7 @@ OUTPUT_DIR = Path(__file__).parent.parent / 'src' / 'macrotools' / 'data'
 BLS_SOURCES = ['ln', 'ce', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu']
 
 def generate_catalogs():
-    email = _get_email_for_bls(None)
+    email = _resolve_credential('email')
     headers = {'User-Agent': email}
 
     for source in BLS_SOURCES:
