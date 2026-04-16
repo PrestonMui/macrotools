@@ -728,6 +728,10 @@ def pull_bls_series(series_list: Union[str, List],
 
         data = pd.concat(data_list, axis=1)
 
+        freq_rule = {'M': 'MS', 'Q': 'QS', 'A': 'YS', 'S': None}.get(detected_freq)
+        if freq_rule is not None and data.index.freq is None:
+            data = data.asfreq(freq_rule)
+
     elif source == 'api':
 
         api_key = _resolve_credential('bls_api_key', api_key)
@@ -828,6 +832,15 @@ def pull_bls_series(series_list: Union[str, List],
         data = raw.pivot_table(values='value', index='date', columns='series_id').sort_index()
         data.index.name = 'date'
         data.columns.name = None
+
+        # Set index frequency so downstream functions (e.g. cagr) can detect it
+        if api_freq == 'M':
+            data = data.asfreq('MS')
+        elif api_freq == 'Q':
+            is_eci = all(sid[:2].lower() == 'ci' for sid in series_list)
+            data = data.asfreq('QS-MAR' if is_eci else 'QS')
+        elif api_freq == 'A':
+            data = data.asfreq('YS')
 
         if date_range:
             data = data.loc[date_range[0]:date_range[1]]

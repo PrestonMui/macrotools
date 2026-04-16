@@ -21,5 +21,9 @@ MacroTools is a public Python package (PyPI: `macrotools`) for pulling, caching,
 ## Known issues
 - `pull_data('cu', freq='S')` breaks: CU semiannual data has an `S03` period (annual average) that the `freq='S'` pivot code doesn't handle — it computes month 13, which is invalid. Need to drop `S03` rows (like `M13` is dropped for monthly).
 
+## To do
+- Add vertical line annotation support to `tsgraph()` (similar to `hline` but for marking specific dates/events)
+- Add Laspeyres, Paasche, and Fisher price index calculation functions to `time_series.py`
+
 ## Current Context
 - Preparing for v1.0 release
