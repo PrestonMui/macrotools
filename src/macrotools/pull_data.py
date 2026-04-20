@@ -13,6 +13,17 @@ from .storage import (
     _resolve_credential,
 )
 
+# Map BLS frequency letter to the pandas offset rule used by .asfreq().
+# ECI ('ci' source) uses QS-MAR for quarterly because Q01 means March (quarter-end).
+_FREQ_TO_OFFSET = {'M': 'MS', 'Q': 'QS', 'A': 'YS'}
+
+def _bls_offset_rule(freq: str, source: Optional[str] = None) -> Optional[str]:
+    """Return the pandas asfreq rule for a BLS frequency letter, or None if unsupported."""
+    if freq == 'Q' and source == 'ci':
+        return 'QS-MAR'
+    return _FREQ_TO_OFFSET.get(freq)
+
+
 def get_series_list(source):
     """
     Return the series catalog for a BLS source as a DataFrame.
@@ -293,37 +304,30 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
             if freq == 'M':
                 data['date'] = pd.to_datetime(
                     data['year'].astype(str) + '-' + data['month'].astype(str))
-                data = (data[['series_id', 'value', 'date']]
-                        .pivot_table(values='value', index='date', columns='series_id')
-                        .asfreq('MS'))
 
             elif freq == 'Q':
                 if source == 'ci':
                     # ECI convention: Q01 -> March (quarter-end month)
                     data['date'] = pd.to_datetime(
                         data['year'].astype(str) + '-' + (data['quarter'] * 3).astype(str) + '-01')
-                    asfreq_rule = 'QS-MAR'
                 else:
                     # Standard: Q01 -> January (quarter-start month)
                     data['date'] = pd.to_datetime(
                         data['year'].astype(str) + '-' + (data['quarter'] * 3 - 2).astype(str) + '-01')
-                    asfreq_rule = 'QS'
-                data = (data[['series_id', 'value', 'date']]
-                        .pivot_table(values='value', index='date', columns='series_id')
-                        .asfreq(asfreq_rule))
 
             elif freq == 'A':
                 data['date'] = pd.to_datetime(data['year'], format='%Y')
-                data = (data[['series_id', 'value', 'date']]
-                        .pivot_table(values='value', index='date', columns='series_id')
-                        .asfreq('YS'))
 
             elif freq == 'S':
                 data['half'] = data['period'].str[1:].astype(int)
                 data['date'] = pd.to_datetime(
                     data['year'].astype(str) + '-' + (data['half'] * 6 - 5).astype(str) + '-01')
-                data = (data[['series_id', 'value', 'date']]
-                        .pivot_table(values='value', index='date', columns='series_id'))
+
+            data = (data[['series_id', 'value', 'date']]
+                    .pivot_table(values='value', index='date', columns='series_id'))
+            offset = _bls_offset_rule(freq, source=source)
+            if offset is not None:
+                data = data.asfreq(offset)
 
             data.index.name = 'date'
 
@@ -728,9 +732,11 @@ def pull_bls_series(series_list: Union[str, List],
 
         data = pd.concat(data_list, axis=1)
 
-        freq_rule = {'M': 'MS', 'Q': 'QS', 'A': 'YS', 'S': None}.get(detected_freq)
-        if freq_rule is not None and data.index.freq is None:
-            data = data.asfreq(freq_rule)
+        # Re-apply asfreq because feather caching and pd.concat may drop the freq attribute.
+        single_source = next(iter(source_groups)) if len(source_groups) == 1 else None
+        offset = _bls_offset_rule(detected_freq, source=single_source)
+        if offset is not None and data.index.freq is None:
+            data = data.asfreq(offset)
 
     elif source == 'api':
 
@@ -833,17 +839,13 @@ def pull_bls_series(series_list: Union[str, List],
         data.index.name = 'date'
         data.columns.name = None
 
-        # Set index frequency so downstream functions (e.g. cagr) can detect it
-        if api_freq == 'M':
-            data = data.asfreq('MS')
-        elif api_freq == 'Q':
-            is_eci = all(sid[:2].lower() == 'ci' for sid in series_list)
-            data = data.asfreq('QS-MAR' if is_eci else 'QS')
-        elif api_freq == 'A':
-            data = data.asfreq('YS')
-
         if date_range:
             data = data.loc[date_range[0]:date_range[1]]
+
+        inferred_source = 'ci' if all(sid[:2].lower() == 'ci' for sid in series_list) else None
+        offset = _bls_offset_rule(api_freq, source=inferred_source)
+        if offset is not None:
+            data = data.asfreq(offset)
 
     if save_file: _save_dataframe(data, save_file)
     return data
