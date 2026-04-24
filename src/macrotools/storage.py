@@ -2,8 +2,8 @@
 Storage module for caching and credentials management.
 
 Handles:
-- Data caching (parquet files with TTL, with .meta.json for DataFrame attrs)
-- User-facing save/load (parquet by default, pickle for .pkl/.pickle extensions)
+- Data caching (feather/parquet files with TTL, with .meta.json for DataFrame attrs)
+- User-facing save/load (feather by default, parquet and pickle also supported)
 - Credentials storage (email, API keys, etc.)
 """
 
@@ -20,28 +20,23 @@ from pathlib import Path
 # ============================================================================
 
 def _save_attrs_meta(meta_path: Path, attrs: dict) -> None:
-    """Save DataFrame.attrs to a companion JSON file."""
+    """Save DataFrame.attrs to a companion JSON file, or remove stale file."""
     if not attrs:
+        meta_path.unlink(missing_ok=True)
         return
-    serializable = {}
-    for key, value in attrs.items():
-        try:
-            json.dumps(value, default=str)
-            serializable[key] = value
-        except (TypeError, ValueError):
-            serializable[key] = str(value)
     with open(meta_path, 'w') as f:
-        json.dump(serializable, f, indent=2, default=str)
+        json.dump(attrs, f, indent=2, default=str)
 
 
 def _load_attrs_meta(meta_path: Path) -> dict:
     """Load DataFrame.attrs from a companion JSON file."""
-    if not meta_path.exists():
-        return {}
     try:
         with open(meta_path, 'r') as f:
             return json.load(f)
-    except Exception:
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        print(f"Warning: Could not load metadata from {meta_path.name}: {e}")
         return {}
 
 
@@ -191,24 +186,16 @@ def clear_macrodata_cache(source: Optional[str] = None) -> None:
         print("Cache directory does not exist.")
         return
 
-    if source:
-        # Clear specific source (parquet + meta + legacy pkl)
-        for pattern in [f'{source}_*.feather', f'{source}_*.meta.json', f'{source}_*.parquet', f'{source}_*.pkl']:
-            for cache_file in cache_dir.glob(pattern):
-                try:
-                    cache_file.unlink()
-                    print(f"Cleared cache: {cache_file.name}")
-                except Exception as e:
-                    print(f"Error deleting {cache_file.name}: {e}")
-    else:
-        # Clear all caches (feather + meta + legacy parquet/pkl)
-        for pattern in ['*.feather', '*.meta.json', '*.parquet', '*.pkl']:
-            for cache_file in cache_dir.glob(pattern):
-                try:
-                    cache_file.unlink()
-                    print(f"Cleared cache: {cache_file.name}")
-                except Exception as e:
-                    print(f"Error deleting {cache_file.name}: {e}")
+    prefix = f'{source}_' if source else ''
+    for pattern in [f'{prefix}*.feather', f'{prefix}*.meta.json', f'{prefix}*.parquet', f'{prefix}*.pkl']:
+        for cache_file in cache_dir.glob(pattern):
+            try:
+                cache_file.unlink()
+                print(f"Cleared cache: {cache_file.name}")
+            except Exception as e:
+                print(f"Error deleting {cache_file.name}: {e}")
+
+    if not source:
         print("All cached data cleared.")
 
 
