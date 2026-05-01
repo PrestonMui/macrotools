@@ -506,7 +506,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
 
         data['date'] = pd.to_datetime(data['DATE'], format='%b-%y')
         data.loc[data['date'].dt.year==2068, 'date'] = data.loc[data['date'].dt.year==2068, 'date'].apply(lambda x: x.replace(year=1968))
-        data.drop(columns='DATE', axis=1, inplace=True)
+        data.drop(columns='DATE', inplace=True)
         data.set_index('date', inplace=True)
 
         if cache: _save_cached_data(data, source, cache_freq)
@@ -541,7 +541,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
         data = pd.read_excel(url)
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
         data = (data
-                .drop(columns='Date', axis=1)
+                .drop(columns='Date')
                 .dropna(subset=['date'])
                 .set_index('date')
         )
@@ -562,7 +562,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
         data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
         data = (data
             .dropna(subset=['date'])
-            .drop(columns='Date', axis=1)
+            .drop(columns='Date')
             .set_index('date')
         )
         if cache: _save_cached_data(data, source, cache_freq)
