@@ -31,7 +31,7 @@ OUTPUT_DIR = Path(__file__).parent.parent / 'src' / 'macrotools' / 'data'
 # BLS sources that have a {source}.series file with a series_title column.
 # Note: 'jt' (JOLTS) has a series file but uses coded fields instead of
 # series_title, so it requires separate handling and is excluded here.
-BLS_SOURCES = ['ln', 'ce', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu']
+BLS_SOURCES = ['ln', 'ce', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu', 'la']
 
 def generate_catalogs():
     email = _resolve_credential('email')

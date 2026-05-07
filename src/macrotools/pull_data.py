@@ -37,7 +37,7 @@ def get_series_list(source):
         catalog_dir = Path(macrotools.__file__).parent / 'data'
         # Files: series_ln.csv, series_ce.csv, series_jt.csv, series_ci.csv,
         #        series_cu.csv, series_pc.csv, series_wp.csv, series_ei.csv,
-        #        series_cx.csv, series_tu.csv
+        #        series_cx.csv, series_tu.csv, series_la.csv
 
     Or via this function:
 
@@ -59,12 +59,13 @@ def get_series_list(source):
         'ei': Import/Export Price Indices
         'cx': CEX (Consumer Expenditures)
         'tu': Time Use Survey
+        'la': Local Area Unemployment Statistics (LAUS)
 
     Returns:
     --------
     pd.DataFrame with columns 'series_id' and 'description'
     """
-    valid_sources = ['ln', 'ce', 'jt', 'ci', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu']
+    valid_sources = ['ln', 'ce', 'jt', 'ci', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu', 'la']
     if source not in valid_sources:
         raise ValueError(
             f"Invalid source: '{source}'. Valid sources: {', '.join(valid_sources)}"
@@ -99,6 +100,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
         'ei': Import/Export Price Index
         'cx': Consumer Expenditures
         'tu': Time Use Survey
+        'la': Local Area Unemployment Statistics (LAUS)
         'nipa-pce': NIPA PCE Data
         'stclaims': State-level unemployment claims
         'ny-mfg': NYFed Empire Manufacturing Survey
@@ -152,8 +154,9 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
         'pc',
         'wp',
         'ei',
-        'cx', 
+        'cx',
         'tu',
+        'la',
         'stclaims',
         'nipa-pce',
         'ny-mfg',
@@ -185,6 +188,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
             'cx': Consumer Expenditures
             'ei': Import and Export Price Indices
             'tu': Time Use Survey
+            'la': Local Area Unemployment Statistics (LAUS)
             'nipa-pce': Monthly NIPA PCE Data
             'stclaims': State-level claims
             'ny-mfg': NYFed Empire Survey
@@ -207,11 +211,11 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
         freq = source_default_freqs.get(source, 'M')
 
     # Determine cache key: freq for BLS flat file sources, 'default' for others
-    bls_sources = ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu']
-    valid_freqs = {'M', 'Q', 'A', 'S', 'all'}
+    bls_sources = ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu', 'la']
     if source in bls_sources:
-        if freq not in valid_freqs:
-            raise ValueError(f"Invalid freq: '{freq}'. Must be one of {valid_freqs}.")
+        allowed = {'M', 'all'} if source == 'la' else {'M', 'Q', 'A', 'S', 'all'}
+        if freq not in allowed:
+            raise ValueError(f"Invalid freq: '{freq}' for source '{source}'. Must be one of {allowed}.")
         cache_freq = freq
     else:
         cache_freq = 'default'
@@ -240,7 +244,7 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
     # If data not cached, pull from source
     print(f"Pulling {source} data from source")
 
-    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu']:
+    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu', 'la']:
 
         email = _resolve_credential('email', email)
 
@@ -258,12 +262,31 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
         }
 
         base_url = 'https://download.bls.gov/pub/time.series/' + source + '/'
-        flat_file_url = base_url + flat_file_name[source]
-
-        # Pull flat file data
         headers = {'User-Agent': email}
-        r = requests.get(flat_file_url, headers=headers)
-        data = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
+
+        if source == 'la':
+            # LAUS splits its data across many flat files: 8 NSA buckets + 1 SA file.
+            # Bucket names follow 5-year periods; new buckets appear every 5 years.
+            la_files = [
+                'la.data.0.CurrentU90-94', 'la.data.0.CurrentU95-99',
+                'la.data.0.CurrentU00-04', 'la.data.0.CurrentU05-09',
+                'la.data.0.CurrentU10-14', 'la.data.0.CurrentU15-19',
+                'la.data.0.CurrentU20-24', 'la.data.0.CurrentU25-29',
+                'la.data.1.CurrentS',
+            ]
+            frames = []
+            for fname in la_files:
+                print(f"  fetching {fname}")
+                r = requests.get(base_url + fname, headers=headers)
+                r.raise_for_status()
+                frames.append(pd.read_csv(io.StringIO(r.text), sep='\t', low_memory=False))
+                del r
+            data = pd.concat(frames, ignore_index=True)
+            del frames
+        else:
+            flat_file_url = base_url + flat_file_name[source]
+            r = requests.get(flat_file_url, headers=headers)
+            data = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
         
         # Rename columns
         data.columns = data.columns.str.strip()
@@ -612,6 +635,8 @@ def _detect_series_freq(source: str, series_ids: list) -> str:
         return 'Q'
     if source in ('cx', 'tu'):
         return 'A'
+    if source == 'la':
+        return 'M'
 
     # 'ln': trailing 'Q' = quarterly, trailing 'A' = annual, else monthly
     # 'cu': 4th char 'S' (CUUS) = semiannual, 'R' (CUUR/CUSR) = monthly
@@ -685,7 +710,7 @@ def pull_bls_series(series_list: Union[str, List],
     if source == 'flatfiles':
 
         valid_sources = [
-            'ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu'
+            'ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu', 'la'
         ]
 
         # Validate prefixes and group series by BLS source
@@ -707,6 +732,7 @@ def pull_bls_series(series_list: Union[str, List],
                 'ei': Import and Export Price Indices
                 'cx': Consumer Expenditures Survey
                 'tu': Time Use Survey
+                'la': Local Area Unemployment Statistics (LAUS)
                 """
             )
             source_groups.setdefault(prefix, []).append(series)
@@ -898,7 +924,7 @@ def search_bls_series(source: str,
     catalog = get_series_list(source)
 
     # Apply seasonal adjustment filter
-    if sa is not None and source in ('ce', 'ci', 'cu', 'jt', 'ln', 'wp'):
+    if sa is not None and source in ('ce', 'ci', 'cu', 'jt', 'ln', 'wp', 'la'):
         sa_char = 'S' if sa else 'U'
         catalog = catalog[catalog['series_id'].str[2] == sa_char]
 
@@ -953,7 +979,7 @@ def search_bls_series(source: str,
         if matched:
             score = round(total_score * 1000 / len(target))
             # Zero bonus: boost aggregate/national series (more 0s in ID)
-            if source in ('ce', 'ci', 'cu', 'jt', 'ln'):
+            if source in ('ce', 'ci', 'cu', 'jt', 'ln', 'la'):
                 score += row['series_id'].count('0') * 200
             scores.append(score)
         else:
