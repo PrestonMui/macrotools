@@ -2,6 +2,13 @@
 
 ## Version 0
 
+### Version 0.3.2
+- Added `'la'` source: BLS Local Area Unemployment Statistics (LAUS) — 33,985 series covering states, metros, counties, and cities. Pulls all 9 BLS flat files (8 NSA buckets + 1 SA file) and concatenates into one DataFrame
+- LAUS works with `pull_data('la')`, `pull_bls_series('LAUST...')` (both `flatfiles` and `api` source modes), `get_series_list('la')`, and `search_bls_series('la', ...)`
+- `pull_bls_series()` now sets `index.freq` on the returned DataFrame so downstream functions like `cagr()` work without a manual `.asfreq()` call
+- Refactored frequency-to-offset mapping into a single shared helper used across `pull_data` flatfiles, `pull_bls_series` flatfiles, and `pull_bls_series` api branches
+- Bug fix: `pull_data('philly-mfg')`, `pull_data('dallas-mfg')`, and `pull_data('dallas-retail')` no longer raise `ValueError: Cannot specify both 'axis' and 'index'/'columns'` on newer pandas
+
 ### Version 0.3.1
 - Added `freq` parameter to `pull_data()` — supports `'M'`, `'Q'`, `'A'`, `'S'`, and `'all'` (unpivoted long-format)
 - Added `columns` parameter to `pull_data()` to filter specific series

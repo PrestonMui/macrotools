@@ -84,6 +84,7 @@ Supported sources:
 | `ei` | Import/Export Price Indices |
 | `cx` | Consumer Expenditures |
 | `tu` | Time Use Survey |
+| `la` | Local Area Unemployment Statistics (LAUS) |
 | `nipa-pce` | NIPA Personal Consumption Expenditures |
 | `stclaims` | State-level unemployment claims |
 | `ny-mfg`, `ny-svc` | NY Fed Empire Manufacturing & Services |

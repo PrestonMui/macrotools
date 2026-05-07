@@ -39,6 +39,6 @@ from .storage import (
 __all__ = ['tsgraph', 'default_colors', 'default_alert_colors', 'eacolors', 'ea_alert_colors', 'pull_data', 'pull_bls_series', 'search_bls_series', 'alfred_as_reported', 'get_series_list', 'clear_macrodata_cache', 'store_credential', 'get_stored_credential']
 
 # Package metadata
-__version__ = '0.3.1'
+__version__ = '0.3.2'
 __author__ = 'Preston Mui'
 __email__ = 'preston@employamerica.org'
