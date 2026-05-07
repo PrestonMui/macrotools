@@ -595,7 +595,11 @@ def tsgraph(series,
                 target_ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0, decimals=yopt['decimals']))
             elif yopt['tickformat'] == 'dec':
                 if yopt['decimals'] is None:
-                    target_ax.yaxis.set_major_formatter(mtick.ScalarFormatter())
+                    def _comma_fmt(x, pos):
+                        if x == int(x):
+                            return f'{int(x):,d}'
+                        return f'{x:,}'.rstrip('0').rstrip('.')
+                    target_ax.yaxis.set_major_formatter(mtick.FuncFormatter(_comma_fmt))
                 else:
                     target_ax.yaxis.set_major_formatter(mtick.StrMethodFormatter(f'{{x:,.{yopt["decimals"]}f}}'))
 
