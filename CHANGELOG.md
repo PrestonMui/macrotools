@@ -3,7 +3,8 @@
 ## Version 0
 
 ### Version 0.3.3
-- Cache layer now writes MultiIndex-column DataFrames to parquet instead of feather, preserving level dtypes (e.g. integer `line` codes on `nipa-pce`). Single-level column DataFrames continue to use feather. Existing caches will be transparently upgraded on next refresh.
+- Fixed bug where `DatetimeIndex.freq` was dropped on cache hits (caused `cagr()` to raise `AttributeError` when called on a cached frame). Frequency is now persisted in the `.meta.json` companion and restored on load.
+- Cache layer now writes wide pivoted BLS sources (`ln`, `ce`, `ci`, `jt`, `cu`, `pc`, `wp`, `ei`, `cx`, `tu`, `la`) to feather and routes every other source to parquet, including non-BLS sources like `nipa-pce`, the regional Fed surveys, and Census EITS. Parquet is the safer default (preserves MultiIndex columns and level dtypes); feather is kept only where its ~2–10× I/O speedup on wide single-level frames is meaningful. `freq='all'` long-format output remains parquet for all sources. MultiIndex-column data is always written to parquet regardless of source. Existing caches transparently migrate to the new format on the next refresh.
 
 ### Version 0.3.2
 - Added `'la'` source: BLS Local Area Unemployment Statistics (LAUS) — 33,985 series covering states, metros, counties, and cities. Pulls all 9 BLS flat files (8 NSA buckets + 1 SA file) and concatenates into one DataFrame

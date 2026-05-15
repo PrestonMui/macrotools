@@ -42,19 +42,22 @@ def _load_attrs_meta(meta_path: Path) -> dict:
 
 def _save_cache_file(data: pd.DataFrame, file_path: Path) -> None:
     """
-    Save a DataFrame as feather (single-level columns) or parquet (MultiIndex
-    columns) plus a companion .meta.json for attrs.
+    Save a DataFrame to the cache, dispatching on the extension of file_path:
+    .feather for wide single-level-column frames where feather's faster I/O
+    matters, .parquet for everything else (preserves MultiIndex columns and
+    level dtypes). The .meta.json companion stores index.name, index.freq,
+    and DataFrame.attrs for either format.
 
-    Feather flattens MultiIndex columns to strings and loses level dtypes, so
-    DataFrames with MultiIndex columns are routed to parquet instead. The cache
-    path passed in here ends in .feather; we swap to .parquet for MultiIndex.
+    Feather can't represent MultiIndex columns — if the caller asked for
+    feather but the data has MultiIndex columns, we override to parquet.
     """
+    if isinstance(data.columns, pd.MultiIndex):
+        file_path = file_path.with_suffix('.parquet')
     index_name = data.index.name
     index_freq = getattr(data.index, 'freqstr', None)
-    use_parquet = isinstance(data.columns, pd.MultiIndex)
     feather_path = file_path.with_suffix('.feather')
     parquet_path = file_path.with_suffix('.parquet')
-    if use_parquet:
+    if file_path.suffix == '.parquet':
         data.to_parquet(parquet_path)
         feather_path.unlink(missing_ok=True)
         data_path = parquet_path
@@ -146,16 +149,31 @@ def _get_cache_dir():
     return Path.home() / '.macrodata_cache'
 
 
+# BLS flat-file sources whose pivoted (M/Q/A/S) caches are wide enough that
+# feather's I/O speedup is meaningful — see scripts/bench_feather_vs_parquet.py
+# in the 0.3.3 development notes. For freq='all' these still go to parquet
+# (long format, narrow). For other (non-BLS) sources we default to parquet
+# since the frames are small and parquet preserves dtypes / MultiIndex cleanly.
+_WIDE_BLS_SOURCES = frozenset({'ln', 'ce', 'ci', 'jt', 'cu', 'pc', 'wp', 'ei', 'cx', 'tu', 'la'})
+
+
+def _preferred_cache_extension(source: str, freq: str) -> str:
+    """Return '.feather' for wide pivoted BLS frames, '.parquet' otherwise."""
+    if source in _WIDE_BLS_SOURCES and freq != 'all':
+        return '.feather'
+    return '.parquet'
+
+
 def _get_cache_file_path(source: str, freq: str) -> Path:
     """
     Canonical cache file path for given parameters. Returns the preferred
-    extension (.parquet for freq='all', .feather otherwise) — the actual file
-    on disk may use the other extension if the data has MultiIndex columns;
-    use _resolve_cache_file to find whichever exists.
+    extension for this source/freq — the actual file on disk may use the
+    other extension if the data has MultiIndex columns (which override to
+    parquet); use _resolve_cache_file to find whichever exists.
     """
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    ext = '.parquet' if freq == 'all' else '.feather'
+    ext = _preferred_cache_extension(source, freq)
     return cache_dir / f'{source}_{freq}{ext}'
 
 
@@ -198,11 +216,7 @@ def _load_cached_data(source: str, freq: str, columns=None) -> Optional[pd.DataF
     if cache_file is None:
         return None
     try:
-        if freq == 'all':
-            # freq='all' is long-format with a default RangeIndex — no meta restore needed.
-            data = pd.read_parquet(cache_file, columns=columns)
-        else:
-            data = _load_cache_file(cache_file, columns=columns)
+        data = _load_cache_file(cache_file, columns=columns)
         age = _get_cache_age_days(cache_file)
         print(f"Loaded {source} from cache ({age:.1f} days old)")
         return data
@@ -215,10 +229,7 @@ def _save_cached_data(data: pd.DataFrame, source: str, freq: str) -> None:
     """Save data to cache."""
     cache_file = _get_cache_file_path(source, freq)
     try:
-        if freq == 'all':
-            data.to_parquet(cache_file)
-        else:
-            _save_cache_file(data, cache_file)
+        _save_cache_file(data, cache_file)
     except Exception as e:
         print(f"Warning: Could not save cache for {source}: {e}")
 
