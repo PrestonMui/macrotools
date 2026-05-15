@@ -41,28 +41,74 @@ def _load_attrs_meta(meta_path: Path) -> dict:
 
 
 def _save_cache_file(data: pd.DataFrame, file_path: Path) -> None:
-    """Save a DataFrame as feather + companion .meta.json for attrs."""
+    """
+    Save a DataFrame as feather (single-level columns) or parquet (MultiIndex
+    columns) plus a companion .meta.json for attrs.
+
+    Feather flattens MultiIndex columns to strings and loses level dtypes, so
+    DataFrames with MultiIndex columns are routed to parquet instead. The cache
+    path passed in here ends in .feather; we swap to .parquet for MultiIndex.
+    """
     index_name = data.index.name
-    data.reset_index().to_feather(file_path)
-    meta_path = file_path.with_suffix('.meta.json')
+    index_freq = getattr(data.index, 'freqstr', None)
+    use_parquet = isinstance(data.columns, pd.MultiIndex)
+    feather_path = file_path.with_suffix('.feather')
+    parquet_path = file_path.with_suffix('.parquet')
+    if use_parquet:
+        data.to_parquet(parquet_path)
+        feather_path.unlink(missing_ok=True)
+        data_path = parquet_path
+    else:
+        data.reset_index().to_feather(feather_path)
+        parquet_path.unlink(missing_ok=True)
+        data_path = feather_path
+    meta_path = data_path.with_suffix('.meta.json')
     attrs = dict(data.attrs)
     if index_name:
         attrs['__index_name__'] = index_name
+    if index_freq:
+        attrs['__index_freq__'] = index_freq
     _save_attrs_meta(meta_path, attrs)
 
 
 def _load_cache_file(file_path: Path, columns=None) -> pd.DataFrame:
-    """Load a DataFrame from feather and restore attrs from companion .meta.json."""
-    meta_path = file_path.with_suffix('.meta.json')
+    """
+    Load a DataFrame from cache, preferring parquet over feather when both
+    exist. Restores DataFrame.attrs and DatetimeIndex.freq from .meta.json.
+
+    Parquet files preserve MultiIndex columns natively; feather files store a
+    single-level Index that we set from the named index column.
+    """
+    parquet_path = file_path.with_suffix('.parquet')
+    feather_path = file_path.with_suffix('.feather')
+    if parquet_path.exists():
+        meta_path = parquet_path.with_suffix('.meta.json')
+        meta = _load_attrs_meta(meta_path)
+        meta.pop('__index_name__', None)
+        index_freq = meta.pop('__index_freq__', None)
+        data = pd.read_parquet(parquet_path, columns=columns)
+        if index_freq:
+            try:
+                data = data.asfreq(index_freq)
+            except (ValueError, TypeError):
+                pass
+        data.attrs = meta
+        return data
+    meta_path = feather_path.with_suffix('.meta.json')
     meta = _load_attrs_meta(meta_path)
     index_name = meta.pop('__index_name__', None)
-    # Always include the index column in the read so we can restore it
+    index_freq = meta.pop('__index_freq__', None)
     read_columns = columns
     if columns is not None and index_name and index_name not in columns:
         read_columns = [index_name] + list(columns)
-    data = pd.read_feather(file_path, columns=read_columns)
+    data = pd.read_feather(feather_path, columns=read_columns)
     if index_name and index_name in data.columns:
         data = data.set_index(index_name)
+    if index_freq:
+        try:
+            data = data.asfreq(index_freq)
+        except (ValueError, TypeError):
+            pass
     data.attrs = meta
     return data
 
@@ -101,11 +147,32 @@ def _get_cache_dir():
 
 
 def _get_cache_file_path(source: str, freq: str) -> Path:
-    """Generate cache file path for given parameters."""
+    """
+    Canonical cache file path for given parameters. Returns the preferred
+    extension (.parquet for freq='all', .feather otherwise) — the actual file
+    on disk may use the other extension if the data has MultiIndex columns;
+    use _resolve_cache_file to find whichever exists.
+    """
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
     ext = '.parquet' if freq == 'all' else '.feather'
     return cache_dir / f'{source}_{freq}{ext}'
+
+
+def _resolve_cache_file(source: str, freq: str) -> Optional[Path]:
+    """
+    Return whichever of .parquet / .feather exists on disk for this source/freq,
+    or None if neither does. Parquet wins if both are present (which shouldn't
+    happen — _save_cache_file deletes the sibling — but is harmless to handle).
+    """
+    base = _get_cache_file_path(source, freq)
+    parquet_path = base.with_suffix('.parquet')
+    feather_path = base.with_suffix('.feather')
+    if parquet_path.exists():
+        return parquet_path
+    if feather_path.exists():
+        return feather_path
+    return None
 
 
 def _get_cache_age_days(cache_file: Path) -> Optional[float]:
@@ -127,20 +194,21 @@ def _should_refresh_cache(cache_file: Path, ttl_days: int = 7) -> bool:
 
 def _load_cached_data(source: str, freq: str, columns=None) -> Optional[pd.DataFrame]:
     """Load data from cache if it exists and is valid."""
-    cache_file = _get_cache_file_path(source, freq)
-    if cache_file.exists():
-        try:
-            if freq == 'all':
-                data = pd.read_parquet(cache_file, columns=columns)
-            else:
-                data = _load_cache_file(cache_file, columns=columns)
-            age = _get_cache_age_days(cache_file)
-            print(f"Loaded {source} from cache ({age:.1f} days old)")
-            return data
-        except Exception as e:
-            print(f"Warning: Could not load cache for {source}: {e}")
-            return None
-    return None
+    cache_file = _resolve_cache_file(source, freq)
+    if cache_file is None:
+        return None
+    try:
+        if freq == 'all':
+            # freq='all' is long-format with a default RangeIndex — no meta restore needed.
+            data = pd.read_parquet(cache_file, columns=columns)
+        else:
+            data = _load_cache_file(cache_file, columns=columns)
+        age = _get_cache_age_days(cache_file)
+        print(f"Loaded {source} from cache ({age:.1f} days old)")
+        return data
+    except Exception as e:
+        print(f"Warning: Could not load cache for {source}: {e}")
+        return None
 
 
 def _save_cached_data(data: pd.DataFrame, source: str, freq: str) -> None:
@@ -166,7 +234,9 @@ def get_cache_age(source: str, freq: str = 'M') -> Optional[float]:
     Returns:
         float or None; Age in days if cached, None if not cached
     """
-    cache_file = _get_cache_file_path(source, freq)
+    cache_file = _resolve_cache_file(source, freq)
+    if cache_file is None:
+        return None
     return _get_cache_age_days(cache_file)
 
 

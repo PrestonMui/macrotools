@@ -2,6 +2,9 @@
 
 ## Version 0
 
+### Version 0.3.3
+- Cache layer now writes MultiIndex-column DataFrames to parquet instead of feather, preserving level dtypes (e.g. integer `line` codes on `nipa-pce`). Single-level column DataFrames continue to use feather. Existing caches will be transparently upgraded on next refresh.
+
 ### Version 0.3.2
 - Added `'la'` source: BLS Local Area Unemployment Statistics (LAUS) — 33,985 series covering states, metros, counties, and cities. Pulls all 9 BLS flat files (8 NSA buckets + 1 SA file) and concatenates into one DataFrame
 - LAUS works with `pull_data('la')`, `pull_bls_series('LAUST...')` (both `flatfiles` and `api` source modes), `get_series_list('la')`, and `search_bls_series('la', ...)`

@@ -195,6 +195,41 @@ def test_pull_bls_series_mixed_freq_error():
 
 
 # ============================================================
+# Cache round-trip tests — index.freq must survive a cache hit
+# (regression test for bug where feather drops DatetimeIndex.freq)
+# ============================================================
+
+def test_cache_preserves_monthly_freq():
+    # Force a fresh pull to write the cache, then a cached read
+    mt.pull_data('ce', force_refresh=True)
+    cached = mt.pull_data('ce')
+    assert cached.index.freq is not None
+    assert cached.index.freq.freqstr == 'MS'
+    # Downstream cagr() reads .freqstr — confirm it doesn't raise
+    series = cached[cached.columns[0]].dropna()
+    if len(series) > 13:
+        mt.cagr(series, lag=12)
+
+
+def test_cache_preserves_quarterly_eci_anchor():
+    # ECI uses QS-MAR (March-anchored quarter starts) — non-standard offset
+    mt.pull_data('ci', freq='Q', force_refresh=True)
+    cached = mt.pull_data('ci', freq='Q')
+    assert cached.index.freq is not None
+    assert cached.index.freq.freqstr == 'QS-MAR'
+
+
+def test_cache_freq_all_long_format_round_trips():
+    # freq='all' returns a long-format frame with no DatetimeIndex; confirm
+    # the cache path still loads it cleanly (no freq to restore, no error)
+    mt.pull_data('ln', freq='all', force_refresh=True)
+    cached = mt.pull_data('ln', freq='all')
+    assert isinstance(cached, pd.DataFrame)
+    assert 'series_id' in cached.columns
+    assert 'value' in cached.columns
+
+
+# ============================================================
 # Input validation tests (no network calls)
 # ============================================================
 

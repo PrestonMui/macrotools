@@ -6,6 +6,7 @@ from pathlib import Path
 from .utils import timer
 from .storage import (
     _get_cache_file_path,
+    _resolve_cache_file,
     _should_refresh_cache,
     _load_cached_data,
     _save_cached_data,
@@ -220,8 +221,9 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
     else:
         cache_freq = 'default'
 
-    # Check cache first
-    cache_file = _get_cache_file_path(source, cache_freq)
+    # Check cache first. Resolve to whichever extension exists on disk
+    # (.feather or .parquet) since MultiIndex-column caches are written as parquet.
+    cache_file = _resolve_cache_file(source, cache_freq) or _get_cache_file_path(source, cache_freq)
     if cache and not force_refresh and not _should_refresh_cache(cache_file):
         cached_data = _load_cached_data(source, cache_freq)
         if cached_data is not None:
