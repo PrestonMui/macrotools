@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import io, requests, webbrowser
 from pathlib import Path
-from .utils import timer
+from .utils import timer, progress
 from .storage import (
     _get_cache_file_path,
     _resolve_cache_file,
@@ -81,7 +81,6 @@ def get_series_list(source):
 
     return pd.read_csv(catalog_path)
 
-@timer
 def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False, cache=True, columns=None):
 
     """
@@ -244,386 +243,387 @@ def pull_data(source, email=None, freq=None, save_file=None, force_refresh=False
             return cached_data
 
     # If data not cached, pull from source
-    print(f"Pulling {source} data from source")
+    with progress(f"Pulling {source} data..."):
 
-    if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu', 'la']:
+        if source in ['ce', 'ln', 'ci', 'jt', 'cu', 'pc', 'wp','ei', 'cx', 'tu', 'la']:
 
-        email = _resolve_credential('email', email)
+            email = _resolve_credential('email', email)
 
-        flat_file_name = {
-            'ce': 'ce.data.0.AllCESSeries',
-            'ln': 'ln.data.1.AllData',
-            'ci': 'ci.data.1.AllData',
-            'jt': 'jt.data.1.AllItems',
-            'cu': 'cu.data.0.Current',
-            'pc': 'pc.data.0.Current',
-            'wp': 'wp.data.0.Current',
-            'ei': 'ei.data.0.Current',
-            'cx': 'cx.data.1.AllData',
-            'tu': 'tu.data.1.AllData'
-        }
+            flat_file_name = {
+                'ce': 'ce.data.0.AllCESSeries',
+                'ln': 'ln.data.1.AllData',
+                'ci': 'ci.data.1.AllData',
+                'jt': 'jt.data.1.AllItems',
+                'cu': 'cu.data.0.Current',
+                'pc': 'pc.data.0.Current',
+                'wp': 'wp.data.0.Current',
+                'ei': 'ei.data.0.Current',
+                'cx': 'cx.data.1.AllData',
+                'tu': 'tu.data.1.AllData'
+            }
 
-        base_url = 'https://download.bls.gov/pub/time.series/' + source + '/'
-        headers = {'User-Agent': email}
+            base_url = 'https://download.bls.gov/pub/time.series/' + source + '/'
+            headers = {'User-Agent': email}
 
-        if source == 'la':
-            # LAUS splits its data across many flat files: 8 NSA buckets + 1 SA file.
-            # Bucket names follow 5-year periods; new buckets appear every 5 years.
-            la_files = [
-                'la.data.0.CurrentU90-94', 'la.data.0.CurrentU95-99',
-                'la.data.0.CurrentU00-04', 'la.data.0.CurrentU05-09',
-                'la.data.0.CurrentU10-14', 'la.data.0.CurrentU15-19',
-                'la.data.0.CurrentU20-24', 'la.data.0.CurrentU25-29',
-                'la.data.1.CurrentS',
-            ]
-            frames = []
-            for fname in la_files:
-                print(f"  fetching {fname}")
-                r = requests.get(base_url + fname, headers=headers)
-                r.raise_for_status()
-                frames.append(pd.read_csv(io.StringIO(r.text), sep='\t', low_memory=False))
-                del r
-            data = pd.concat(frames, ignore_index=True)
-            del frames
-        else:
-            flat_file_url = base_url + flat_file_name[source]
-            r = requests.get(flat_file_url, headers=headers)
-            data = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
-        
-        # Rename columns
-        data.columns = data.columns.str.strip()
-
-        # Clean up data
-        data['series_id'] = data['series_id'].str.strip()
-        data['value'] = pd.to_numeric(data['value'], errors='coerce')
-
-        # Clean periods and classify frequency
-        data['period'] = data['period'].str.strip()
-
-        data['frequency'] = data['period'].apply(
-            lambda x: 'A' if (x == 'M13') or x[0] == 'A'
-            else ('Q' if x[0] == 'Q'
-            else ('S' if x[0] == 'S'
-            else 'M'))
-        )
-        # Pivot by frequency
-        if freq == 'all':
-            data['period'] = data['period'].str[1:].astype(int)
-
-
-        else:
-            # Drop M13 annual averages for pivoted output
-            data = data[data['period'] != 'M13']
-            data = data.loc[data['frequency'] == freq].copy()
-
-            if data.empty:
-                raise ValueError(
-                    f"No '{freq}' frequency data found in source '{source}'."
-                )
-
-            data['month'] = data['period'].apply(
-                lambda x: pd.NA if x[0] in ('A', 'Q', 'S') else int(x[1:]))
-            data['quarter'] = data['period'].apply(
-                lambda x: int(x[2:]) if x[0] == 'Q' else pd.NA)
-
-            if freq == 'M':
-                data['date'] = pd.to_datetime(
-                    data['year'].astype(str) + '-' + data['month'].astype(str))
-
-            elif freq == 'Q':
-                if source == 'ci':
-                    # ECI convention: Q01 -> March (quarter-end month)
-                    data['date'] = pd.to_datetime(
-                        data['year'].astype(str) + '-' + (data['quarter'] * 3).astype(str) + '-01')
-                else:
-                    # Standard: Q01 -> January (quarter-start month)
-                    data['date'] = pd.to_datetime(
-                        data['year'].astype(str) + '-' + (data['quarter'] * 3 - 2).astype(str) + '-01')
-
-            elif freq == 'A':
-                data['date'] = pd.to_datetime(data['year'], format='%Y')
-
-            elif freq == 'S':
-                data['half'] = data['period'].str[1:].astype(int)
-                data['date'] = pd.to_datetime(
-                    data['year'].astype(str) + '-' + (data['half'] * 6 - 5).astype(str) + '-01')
-
-            data = (data[['series_id', 'value', 'date']]
-                    .pivot_table(values='value', index='date', columns='series_id'))
-            offset = _bls_offset_rule(freq, source=source)
-            if offset is not None:
-                data = data.asfreq(offset)
-
-            data.index.name = 'date'
-
-        if cache: _save_cached_data(data, source, cache_freq)
-        if columns is not None:
-            if freq == 'all':
-                available = set(data['series_id'].unique())
-                missing = [c for c in columns if c not in available]
-                if missing:
-                    raise ValueError(f"Series not found in '{source}': {missing}")
-                data = data[data['series_id'].isin(columns)]
+            if source == 'la':
+                # LAUS splits its data across many flat files: 8 NSA buckets + 1 SA file.
+                # Bucket names follow 5-year periods; new buckets appear every 5 years.
+                la_files = [
+                    'la.data.0.CurrentU90-94', 'la.data.0.CurrentU95-99',
+                    'la.data.0.CurrentU00-04', 'la.data.0.CurrentU05-09',
+                    'la.data.0.CurrentU10-14', 'la.data.0.CurrentU15-19',
+                    'la.data.0.CurrentU20-24', 'la.data.0.CurrentU25-29',
+                    'la.data.1.CurrentS',
+                ]
+                frames = []
+                for fname in la_files:
+                    r = requests.get(base_url + fname, headers=headers)
+                    r.raise_for_status()
+                    frames.append(pd.read_csv(io.StringIO(r.text), sep='\t', low_memory=False))
+                    del r
+                data = pd.concat(frames, ignore_index=True)
+                del frames
             else:
-                missing = [c for c in columns if c not in data.columns]
-                if missing:
-                    raise ValueError(f"Series not found in '{source}': {missing}")
-                data = data[columns]
-        if save_file: _save_dataframe(data, save_file)
-        return data
+                flat_file_url = base_url + flat_file_name[source]
+                r = requests.get(flat_file_url, headers=headers)
+                data = pd.read_csv(io.StringIO(r.text), sep = '\t', low_memory=False)
+            
+            # Rename columns
+            data.columns = data.columns.str.strip()
 
-    if source=='stclaims':
+            # Clean up data
+            data['series_id'] = data['series_id'].str.strip()
+            data['value'] = pd.to_numeric(data['value'], errors='coerce')
 
-        # Pull flat file data
-        webbrowser.open_new_tab('https://oui.doleta.gov/unemploy/csv/ar539.csv')
-        stclaims_path = input('The DOL website does not permit bot access. I have opened the State-level unemployment data in a new browser. Please save the file and write the path, without quote marks, in this box, e.g.: C:/Users/prest/test/ar539.csv ; if you input nothing I will look for the file in data/ar539.csv ; Press Enter to Continue AFTER the file has finished downloading')
+            # Clean periods and classify frequency
+            data['period'] = data['period'].str.strip()
 
-        if stclaims_path=='':
-            filepath = 'data/ar539.csv'
-        else:
-            filepath = stclaims_path        
+            data['frequency'] = data['period'].apply(
+                lambda x: 'A' if (x == 'M13') or x[0] == 'A'
+                else ('Q' if x[0] == 'Q'
+                else ('S' if x[0] == 'S'
+                else 'M'))
+            )
+            # Pivot by frequency
+            if freq == 'all':
+                data['period'] = data['period'].str[1:].astype(int)
+
+
+            else:
+                # Drop M13 annual averages for pivoted output
+                data = data[data['period'] != 'M13']
+                data = data.loc[data['frequency'] == freq].copy()
+
+                if data.empty:
+                    raise ValueError(
+                        f"No '{freq}' frequency data found in source '{source}'."
+                    )
+
+                data['month'] = data['period'].apply(
+                    lambda x: pd.NA if x[0] in ('A', 'Q', 'S') else int(x[1:]))
+                data['quarter'] = data['period'].apply(
+                    lambda x: int(x[2:]) if x[0] == 'Q' else pd.NA)
+
+                if freq == 'M':
+                    data['date'] = pd.to_datetime(
+                        data['year'].astype(str) + '-' + data['month'].astype(str))
+
+                elif freq == 'Q':
+                    if source == 'ci':
+                        # ECI convention: Q01 -> March (quarter-end month)
+                        data['date'] = pd.to_datetime(
+                            data['year'].astype(str) + '-' + (data['quarter'] * 3).astype(str) + '-01')
+                    else:
+                        # Standard: Q01 -> January (quarter-start month)
+                        data['date'] = pd.to_datetime(
+                            data['year'].astype(str) + '-' + (data['quarter'] * 3 - 2).astype(str) + '-01')
+
+                elif freq == 'A':
+                    data['date'] = pd.to_datetime(data['year'], format='%Y')
+
+                elif freq == 'S':
+                    data['half'] = data['period'].str[1:].astype(int)
+                    data['date'] = pd.to_datetime(
+                        data['year'].astype(str) + '-' + (data['half'] * 6 - 5).astype(str) + '-01')
+
+                data = (data[['series_id', 'value', 'date']]
+                        .pivot_table(values='value', index='date', columns='series_id'))
+                offset = _bls_offset_rule(freq, source=source)
+                if offset is not None:
+                    data = data.asfreq(offset)
+
+                data.index.name = 'date'
+
+            if cache: _save_cached_data(data, source, cache_freq)
+            if columns is not None:
+                if freq == 'all':
+                    available = set(data['series_id'].unique())
+                    missing = [c for c in columns if c not in available]
+                    if missing:
+                        raise ValueError(f"Series not found in '{source}': {missing}")
+                    data = data[data['series_id'].isin(columns)]
+                else:
+                    missing = [c for c in columns if c not in data.columns]
+                    if missing:
+                        raise ValueError(f"Series not found in '{source}': {missing}")
+                    data = data[columns]
+            if save_file: _save_dataframe(data, save_file)
+            return data
+
+        if source=='stclaims':
+
+            # Pull flat file data
+            webbrowser.open_new_tab('https://oui.doleta.gov/unemploy/csv/ar539.csv')
+            stclaims_path = input('The DOL website does not permit bot access. I have opened the State-level unemployment data in a new browser. Please save the file and write the path, without quote marks, in this box, e.g.: C:/Users/prest/test/ar539.csv ; if you input nothing I will look for the file in data/ar539.csv ; Press Enter to Continue AFTER the file has finished downloading')
+
+            if stclaims_path=='':
+                filepath = 'data/ar539.csv'
+            else:
+                filepath = stclaims_path        
+            
+            stclaims = (pd.read_csv(filepath, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'], low_memory=False)
+                    .rename(columns={
+                    'st': 'state',
+                    'c1': 'weeknumber',
+                    'c2': 'weekending',
+                    'c3': 'ic',
+                    'c4': 'fic',
+                    'c5': 'xic',
+                    'c6': 'wsic',
+                    'c7': 'wseic',
+                    'c8': 'cw',
+                    'c9': 'fcw',
+                    'c10': 'xcw',
+                    'c11': 'wscw',
+                    'c12': 'wsecw',
+                    'c13': 'ebt',
+                    'c14': 'ebui',
+                    'c15': 'abt',
+                    'c16': 'abui',
+                    'c17': 'at',
+                    'c18': 'ce',
+                    'c19': 'r',
+                    'c20': 'ar',
+                    'c21': 'p',
+                    'c22': 'status',
+                    'c23': 'changedate'}))
+
+            column_descriptions = {
+                'ic': 'State UI Initial Claims, less intrastate transitional.',
+                'fic': 'UCFE-no UI Initial Claims.',
+                'xic': 'UCX only Initial Claims',
+                'wsic': 'STC or workshare total initial claims',
+                'wseic': 'STC or workshare equivalent initial claims',
+                'cw': 'State UI adjusted continued weeks claimed',
+                'fcw': 'UCFE-no UI adjusted continued weeks claimed',
+                'xcw': 'UCX only adjusted continued weeks claimed',
+                'wscw': 'STC or workshare total continued weeks claimed',
+                'wsecw': 'STC or workshare equivalent continued weeks claimed',
+                'ebt': 'Total continued weeks claimed under the Federal/State Extended Benefit Program--includes all intrastate and interstate continued weeks claimed filed from an agent state under the state UI, UCFE and UCX programs.',
+                'ebui': 'That part of EBT which represents only state UI weeks claimed under the Federal/State EB program.',
+                'abt': 'Total continued weeks claimed under a state additional benefit program for those states which have such a program. (Includes UCFE and UCX.)',
+                'abui': 'That part of ABT which represents only state UI additional continued weeks claimed for those states which have such a program.',
+                'at': 'Average adjusted Total Continued Weeks Claimed.',
+                'ce': 'Covered employment. 12-month average monthly covered employment for first 4 of last 6 completed quarters. Will only change once per quarter.',
+                'r': 'Rate of insured unemployment.',
+                'ar': 'Average Rate of Insured Employment in Prior Two Years',
+                'p': 'Current Rate as Percent of Average Rate in Prior Two Years',
+                'status': 'Beginning or Ending of State Extended Benefit Period',
+                'changedate': 'If status has changed since prior week, date which change is effective.'
+            }
+            
+            # Initial claims follow the report date; continuing claims follow the weekending date.
+            stclaims_rptdate = (stclaims[['state','rptdate','weeknumber','ic','fic','xic','wsic','wseic']]
+                                .rename(columns={'rptdate': 'weekending'})
+                                .set_index(['state', 'weekending']))
+            stclaims_weekending = (stclaims
+                                   .drop(['rptdate','weeknumber','ic','fic','xic','wsic','wseic'], axis=1)
+                                   .set_index(['state', 'weekending']))
+            stclaims = pd.concat([stclaims_rptdate, stclaims_weekending], axis=1)
+
+            stclaims['initial_claims'] = stclaims['ic'] + stclaims['wseic']
+            stclaims['continuing_claims'] = stclaims['cw'] + stclaims['wsecw']
+
+            stclaims = stclaims.sort_index()
+
+            # Pivot Table (dates as rows, variables and states as columns)
+            # stclaims = stclaims.asfreq('W-SAT')
+
+            # Attributes
+            stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a pivot table where rows indexed by 'state' and 'weekending' (Timetamps reflecting the Saturday the week ends); columns are data types. Be careful that not all states appear in every week."""
+            stclaims.attrs['series'] = column_descriptions
+            stclaims.attrs['date_created'] = pd.Timestamp.now().date()
+
+            if save_file: _save_dataframe(stclaims, save_file)
+            if cache: _save_cached_data(stclaims, source, cache_freq)
+            return stclaims
         
-        stclaims = (pd.read_csv(filepath, parse_dates=['rptdate','c2', 'c23','curdate','priorwk_pub','priorwk'], low_memory=False)
-                .rename(columns={
-                'st': 'state',
-                'c1': 'weeknumber',
-                'c2': 'weekending',
-                'c3': 'ic',
-                'c4': 'fic',
-                'c5': 'xic',
-                'c6': 'wsic',
-                'c7': 'wseic',
-                'c8': 'cw',
-                'c9': 'fcw',
-                'c10': 'xcw',
-                'c11': 'wscw',
-                'c12': 'wsecw',
-                'c13': 'ebt',
-                'c14': 'ebui',
-                'c15': 'abt',
-                'c16': 'abui',
-                'c17': 'at',
-                'c18': 'ce',
-                'c19': 'r',
-                'c20': 'ar',
-                'c21': 'p',
-                'c22': 'status',
-                'c23': 'changedate'}))
+        if source=='nipa-pce':
 
-        column_descriptions = {
-            'ic': 'State UI Initial Claims, less intrastate transitional.',
-            'fic': 'UCFE-no UI Initial Claims.',
-            'xic': 'UCX only Initial Claims',
-            'wsic': 'STC or workshare total initial claims',
-            'wseic': 'STC or workshare equivalent initial claims',
-            'cw': 'State UI adjusted continued weeks claimed',
-            'fcw': 'UCFE-no UI adjusted continued weeks claimed',
-            'xcw': 'UCX only adjusted continued weeks claimed',
-            'wscw': 'STC or workshare total continued weeks claimed',
-            'wsecw': 'STC or workshare equivalent continued weeks claimed',
-            'ebt': 'Total continued weeks claimed under the Federal/State Extended Benefit Program--includes all intrastate and interstate continued weeks claimed filed from an agent state under the state UI, UCFE and UCX programs.',
-            'ebui': 'That part of EBT which represents only state UI weeks claimed under the Federal/State EB program.',
-            'abt': 'Total continued weeks claimed under a state additional benefit program for those states which have such a program. (Includes UCFE and UCX.)',
-            'abui': 'That part of ABT which represents only state UI additional continued weeks claimed for those states which have such a program.',
-            'at': 'Average adjusted Total Continued Weeks Claimed.',
-            'ce': 'Covered employment. 12-month average monthly covered employment for first 4 of last 6 completed quarters. Will only change once per quarter.',
-            'r': 'Rate of insured unemployment.',
-            'ar': 'Average Rate of Insured Employment in Prior Two Years',
-            'p': 'Current Rate as Percent of Average Rate in Prior Two Years',
-            'status': 'Beginning or Ending of State Extended Benefit Period',
-            'changedate': 'If status has changed since prior week, date which change is effective.'
-        }
+            freq = 'M'
+
+            url_nipa = 'https://apps.bea.gov/national/Release/TXT/NipaData' + freq + '.txt'
+            r = requests.get(url_nipa)
+            data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+            data.rename(columns={'%SeriesCode': 'series_code', 'Period': 'period', 'Value': 'value'}, inplace=True)
+
+            # Keep only PCE Series
+            pceseries = pd.read_csv(str(Path(__file__).parent / 'data' / 'pceseries.csv'))
+
+            pceseries_melted = pd.melt(pceseries, id_vars
+            =['line', 'name'], value_vars = ['quantitycode','pricecode','nominalcode','realcode'], var_name='datatype')
+            pceseries_melted['datatype'] = pceseries_melted['datatype'].str.removesuffix('code')
+            pceseries_melted.rename(columns={'value': 'series_code'}, inplace=True)
+            data = pd.merge(data, pceseries_melted, how='right', right_on='series_code', left_on='series_code')
+
+            # Format date column
+            if freq=='M':
+                data['date'] = pd.to_datetime(data['period'], format='%YM%m')
+            data.drop(['period'], axis=1, inplace=True)
+
+            # Format numeric
+            data['value'] = pd.to_numeric(data['value'].str.replace(',',''))
+
+            # Format as pivot table
+            data = data.pivot_table(values='value', index = 'date', columns = ['line', 'datatype'])
+            if freq=='M':
+                data.asfreq('MS')
+
+            data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
+            data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
+            data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
         
-        # Initial claims follow the report date; continuing claims follow the weekending date.
-        stclaims_rptdate = (stclaims[['state','rptdate','weeknumber','ic','fic','xic','wsic','wseic']]
-                            .rename(columns={'rptdate': 'weekending'})
-                            .set_index(['state', 'weekending']))
-        stclaims_weekending = (stclaims
-                               .drop(['rptdate','weeknumber','ic','fic','xic','wsic','wseic'], axis=1)
-                               .set_index(['state', 'weekending']))
-        stclaims = pd.concat([stclaims_rptdate, stclaims_weekending], axis=1)
+        if source=='ny-mfg':
 
-        stclaims['initial_claims'] = stclaims['ic'] + stclaims['wseic']
-        stclaims['continuing_claims'] = stclaims['cw'] + stclaims['wsecw']
+            url = 'https://www.newyorkfed.org/medialibrary/media/Survey/Empire/data/ESMS_SeasonallyAdjusted_Diffusion.csv'
+            r = requests.get(url)
+            data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+            data.rename(columns={'surveyDate': 'date'}, inplace=True)
+            data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
+            data.set_index('date', inplace=True)
 
-        stclaims = stclaims.sort_index()
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
+        
+        if source=='ny-svc':
 
-        # Pivot Table (dates as rows, variables and states as columns)
-        # stclaims = stclaims.asfreq('W-SAT')
+            url = 'https://www.newyorkfed.org/medialibrary/media/Survey/business_leaders/data/BLS_NotSeasonallyAdjusted_Diffusion.csv'
+            r = requests.get(url)
+            data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
+            data.rename(columns={'surveyDate': 'date'}, inplace=True)
+            data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
+            data.set_index('date', inplace=True)
 
-        # Attributes
-        stclaims.attrs['data_description'] = """Weekly state-level claims data. The structure is a pivot table where rows indexed by 'state' and 'weekending' (Timetamps reflecting the Saturday the week ends); columns are data types. Be careful that not all states appear in every week."""
-        stclaims.attrs['series'] = column_descriptions
-        stclaims.attrs['date_created'] = pd.Timestamp.now().date()
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
+        
+        if source=='philly-mfg':
 
-        if save_file: _save_dataframe(stclaims, save_file)
-        if cache: _save_cached_data(stclaims, source, cache_freq)
-        return stclaims
-    
-    if source=='nipa-pce':
+            url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/MBOS/Historical-Data/Diffusion-Indexes/bos_dif.csv'
+            r = requests.get(url)
+            data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
 
-        print('Pulling Monthly NIPA-PCE data.')
+            data['date'] = pd.to_datetime(data['DATE'], format='%b-%y')
+            data.loc[data['date'].dt.year==2068, 'date'] = data.loc[data['date'].dt.year==2068, 'date'].apply(lambda x: x.replace(year=1968))
+            data.drop(columns='DATE', inplace=True)
+            data.set_index('date', inplace=True)
 
-        freq = 'M'
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
 
-        url_nipa = 'https://apps.bea.gov/national/Release/TXT/NipaData' + freq + '.txt'
-        r = requests.get(url_nipa)
-        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
-        data.rename(columns={'%SeriesCode': 'series_code', 'Period': 'period', 'Value': 'value'}, inplace=True)
+        if source=='philly-nonmfg':
 
-        # Keep only PCE Series
-        pceseries = pd.read_csv(str(Path(__file__).parent / 'data' / 'pceseries.csv'))
+            url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/NBOS/nboshistory.xlsx'
+            data = pd.read_excel(url)
+            data.set_index('date', inplace=True)
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
+        
+        if source=='richmond-mfg':
 
-        pceseries_melted = pd.melt(pceseries, id_vars
-        =['line', 'name'], value_vars = ['quantitycode','pricecode','nominalcode','realcode'], var_name='datatype')
-        pceseries_melted['datatype'] = pceseries_melted['datatype'].str.removesuffix('code')
-        pceseries_melted.rename(columns={'value': 'series_code'}, inplace=True)
-        data = pd.merge(data, pceseries_melted, how='right', right_on='series_code', left_on='series_code')
+            url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/manufacturing/data/mfg_historicaldata.xlsx'
+            data = pd.read_excel(url)
+            data.set_index('date', inplace=True)
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
+        
+        if source=='richmond-nonmfg':
 
-        # Format date column
-        if freq=='M':
-            data['date'] = pd.to_datetime(data['period'], format='%YM%m')
-        data.drop(['period'], axis=1, inplace=True)
+            url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/non-manufacturing/data/nmf_historicaldata.xlsx'
+            data = pd.read_excel(url)
+            data.set_index('date', inplace=True)
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
+        
+        if source=='dallas-mfg':
+            url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tmos/documents/index_sa.xls'
+            data = pd.read_excel(url)
+            data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
+            data = (data
+                    .drop(columns='Date')
+                    .dropna(subset=['date'])
+                    .set_index('date')
+            )
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
 
-        # Format numeric
-        data['value'] = pd.to_numeric(data['value'].str.replace(',',''))
+        if source=='dallas-svc':
+            url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tssos_index_sa.xls'
+            data = pd.read_excel(url)
+            data['date'] = pd.to_datetime(data['date'], format='%b-%y')
+            data.set_index('date', inplace=True)
+            # Some columns arrive as dtype=object with blank cells mixed in with floats;
+            # coerce to numeric so the parquet writer has a consistent column schema.
+            data = data.apply(pd.to_numeric, errors='coerce')
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
 
-        # Format as pivot table
-        data = data.pivot_table(values='value', index = 'date', columns = ['line', 'datatype'])
-        if freq=='M':
-            data.asfreq('MS')
-
-        data.attrs['series'] = pceseries.set_index('line')['name'].to_dict()
-        data.attrs['parents'] = pceseries.set_index('line')['parent'].astype('Int64').to_dict()
-        data.attrs['levels'] = pceseries.set_index('line')['level'].to_dict()
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='ny-mfg':
-
-        url = 'https://www.newyorkfed.org/medialibrary/media/Survey/Empire/data/ESMS_SeasonallyAdjusted_Diffusion.csv'
-        r = requests.get(url)
-        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
-        data.rename(columns={'surveyDate': 'date'}, inplace=True)
-        data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
-        data.set_index('date', inplace=True)
-
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='ny-svc':
-
-        url = 'https://www.newyorkfed.org/medialibrary/media/Survey/business_leaders/data/BLS_NotSeasonallyAdjusted_Diffusion.csv'
-        r = requests.get(url)
-        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
-        data.rename(columns={'surveyDate': 'date'}, inplace=True)
-        data['date'] = pd.to_datetime(data['date']).dt.to_period('M').dt.to_timestamp()
-        data.set_index('date', inplace=True)
-
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='philly-mfg':
-
-        url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/MBOS/Historical-Data/Diffusion-Indexes/bos_dif.csv'
-        r = requests.get(url)
-        data = pd.read_csv(io.StringIO(r.text), sep = ',', low_memory=False)
-
-        data['date'] = pd.to_datetime(data['DATE'], format='%b-%y')
-        data.loc[data['date'].dt.year==2068, 'date'] = data.loc[data['date'].dt.year==2068, 'date'].apply(lambda x: x.replace(year=1968))
-        data.drop(columns='DATE', inplace=True)
-        data.set_index('date', inplace=True)
-
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-
-    if source=='philly-nonmfg':
-
-        url = 'https://www.philadelphiafed.org/-/media/FRBP/Assets/Surveys-And-Data/NBOS/nboshistory.xlsx'
-        data = pd.read_excel(url)
-        data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='richmond-mfg':
-
-        url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/manufacturing/data/mfg_historicaldata.xlsx'
-        data = pd.read_excel(url)
-        data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='richmond-nonmfg':
-
-        url = 'https://www.richmondfed.org/-/media/RichmondFedOrg/region_communities/regional_data_analysis/regional_economy/surveys_of_business_conditions/non-manufacturing/data/nmf_historicaldata.xlsx'
-        data = pd.read_excel(url)
-        data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='dallas-mfg':
-        url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tmos/documents/index_sa.xls'
-        data = pd.read_excel(url)
-        data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
-        data = (data
-                .drop(columns='Date')
+        if source=='dallas-retail':
+            url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tros_index_sa.xls'
+            data = pd.read_excel(url)
+            data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
+            data = (data
                 .dropna(subset=['date'])
+                .drop(columns='Date')
                 .set_index('date')
-        )
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
+            )
+            data = data.apply(pd.to_numeric, errors='coerce')
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
+        
+        if source=='kc-mfg':
 
-    if source=='dallas-svc':
-        url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tssos_index_sa.xls'
-        data = pd.read_excel(url)
-        data['date'] = pd.to_datetime(data['date'], format='%b-%y')
-        data.set_index('date', inplace=True)
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
+            webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/manufacturing-survey/')
+            url = input('Enter the url for the services survey data at the tab opened.')
+            data = pd.read_excel(url, skiprows=2)
+            data.loc[2:16, 'Unnamed: 0'] = data.iloc[2:16]['Unnamed: 0'].astype(str) + ' vs month ago sa'
+            data.loc[18:32, 'Unnamed: 0'] = data.iloc[18:32]['Unnamed: 0'].astype(str) + ' vs month ago nsa'
+            data.loc[34:48, 'Unnamed: 0'] = data.iloc[34:48]['Unnamed: 0'].astype(str) + ' vs year ago nsa'
+            data.loc[50:64, 'Unnamed: 0'] = data.iloc[50:64]['Unnamed: 0'].astype(str) + ' exp six months sa'
+            data.loc[66:80, 'Unnamed: 0'] = data.iloc[66:80]['Unnamed: 0'].astype(str) + ' exp six months nsa'
+            data = data.drop([0,1, 16, 17, 32, 33, 48, 49, 64, 65])
 
-    if source=='dallas-retail':
-        url = 'https://www.dallasfed.org/~/media/Documents/research/surveys/tssos/documents/tros_index_sa.xls'
-        data = pd.read_excel(url)
-        data['date'] = pd.to_datetime(data['Date'], format='%b-%y')
-        data = (data
-            .dropna(subset=['date'])
-            .drop(columns='Date')
-            .set_index('date')
-        )
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
-    
-    if source=='kc-mfg':
+            data = data.set_index('Unnamed: 0').transpose()
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
 
-        webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/manufacturing-survey/')
-        url = input('Enter the url for the services survey data at the tab opened.')
-        data = pd.read_excel(url, skiprows=2)
-        data.loc[2:16, 'Unnamed: 0'] = data.iloc[2:16]['Unnamed: 0'].astype(str) + ' vs month ago sa'
-        data.loc[18:32, 'Unnamed: 0'] = data.iloc[18:32]['Unnamed: 0'].astype(str) + ' vs month ago nsa'
-        data.loc[34:48, 'Unnamed: 0'] = data.iloc[34:48]['Unnamed: 0'].astype(str) + ' vs year ago nsa'
-        data.loc[50:64, 'Unnamed: 0'] = data.iloc[50:64]['Unnamed: 0'].astype(str) + ' exp six months sa'
-        data.loc[66:80, 'Unnamed: 0'] = data.iloc[66:80]['Unnamed: 0'].astype(str) + ' exp six months nsa'
-        data = data.drop([0,1, 16, 17, 32, 33, 48, 49, 64, 65])
+        if source=='kc-svc':
 
-        data = data.set_index('Unnamed: 0').transpose()
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
+            webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/services-survey/')
+            url = input('Enter the url for the services survey data at the tab opened.')
+            data = pd.read_excel(url, skiprows=2)
+            data.loc[2:13, 'Unnamed: 0'] = data.iloc[2:13]['Unnamed: 0'].astype(str) + ' vs month ago sa'
+            data.loc[16:27, 'Unnamed: 0'] = data.iloc[16:27]['Unnamed: 0'].astype(str) + ' vs month ago nsa'
+            data.loc[30:43, 'Unnamed: 0'] = data.iloc[30:43]['Unnamed: 0'].astype(str) + ' vs year ago nsa'
+            data.loc[46:57, 'Unnamed: 0'] = data.iloc[46:57]['Unnamed: 0'].astype(str) + ' exp six months sa'
+            data.loc[60:71, 'Unnamed: 0'] = data.iloc[60:71]['Unnamed: 0'].astype(str) + ' exp six months nsa'
+            data = data.drop([0,1, 13, 14, 15, 27, 28, 29, 43, 44, 45, 57, 58, 59])
 
-    if source=='kc-svc':
-
-        webbrowser.open_new_tab('https://www.kansascityfed.org/surveys/services-survey/')
-        url = input('Enter the url for the services survey data at the tab opened.')
-        data = pd.read_excel(url, skiprows=2)
-        data.loc[2:13, 'Unnamed: 0'] = data.iloc[2:13]['Unnamed: 0'].astype(str) + ' vs month ago sa'
-        data.loc[16:27, 'Unnamed: 0'] = data.iloc[16:27]['Unnamed: 0'].astype(str) + ' vs month ago nsa'
-        data.loc[30:43, 'Unnamed: 0'] = data.iloc[30:43]['Unnamed: 0'].astype(str) + ' vs year ago nsa'
-        data.loc[46:57, 'Unnamed: 0'] = data.iloc[46:57]['Unnamed: 0'].astype(str) + ' exp six months sa'
-        data.loc[60:71, 'Unnamed: 0'] = data.iloc[60:71]['Unnamed: 0'].astype(str) + ' exp six months nsa'
-        data = data.drop([0,1, 13, 14, 15, 27, 28, 29, 43, 44, 45, 57, 58, 59])
-
-        data = data.set_index('Unnamed: 0').transpose()
-        if cache: _save_cached_data(data, source, cache_freq)
-        return data
+            data = data.set_index('Unnamed: 0').transpose()
+            if cache: _save_cached_data(data, source, cache_freq)
+            return data
 
 def _detect_series_freq(source: str, series_ids: list) -> str:
     """
