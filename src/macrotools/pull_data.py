@@ -776,13 +776,13 @@ def pull_bls_series(series_list: Union[str, List],
             end_year = int(date_range[1].split('-')[0])
         else:
             end_year = pd.Timestamp.now().year
-            start_year = end_year - 9
+            start_year = end_year - 19
 
-        # Build year chunks (max 10 years per API request)
+        # Build year chunks (max 20 years per API request, per BLS API v2)
         year_chunks = []
         y = start_year
         while y <= end_year:
-            chunk_end = min(y + 9, end_year)
+            chunk_end = min(y + 19, end_year)
             year_chunks.append((str(y), str(chunk_end)))
             y = chunk_end + 1
 
